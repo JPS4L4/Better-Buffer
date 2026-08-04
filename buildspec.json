@@ -33,13 +33,13 @@
     },
     "platformConfig": {
         "macos": {
-            "bundleId": "com.tuusuario.obs-replay-selector"
+            "bundleId": "com.tuusuario.better-buffer"
         }
     },
-    "name": "obs-replay-selector",
-    "displayName": "Replay Selector",
+    "name": "better-buffer",
+    "displayName": "Better Buffer",
     "version": "0.1.0",
-    "author": "Tu Nombre Aqui",
-    "website": "https://example.com",
-    "email": "tu@email.com"
+    "author": "Juan Pablo Salazar Ceballos",
+    "website": "https://github.com/JPS4L4",
+    "email": "devjuansalazar04@gmail.com"
 }

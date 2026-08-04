@@ -8,10 +8,10 @@ set(CMAKE_FIND_PACKAGE_TARGETS_GLOBAL TRUE)
 include(buildspec)
 
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  file(TO_CMAKE_PATH "$ENV{ALLUSERSPROFILE}" _obs_allusersprofile)
+  file(TO_CMAKE_PATH "$ENV{APPDATA}" _obs_appdata)
   set(
     CMAKE_INSTALL_PREFIX
-    "${_obs_allusersprofile}/obs-studio/plugins"
+    "${_obs_appdata}/obs-studio/plugins"
     CACHE STRING
     "Default plugin installation directory"
     FORCE
