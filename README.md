@@ -42,7 +42,7 @@ Documentación general de la plantilla base (referencia para quien quiera entend
 
 Better Buffer es desarrollado y mantenido en mi tiempo libre. Si te resulta útil y quieres apoyar el desarrollo continuo (nuevas funciones, corrección de bugs, soporte en más plataformas), puedes invitarme un café:
 
-<a href="https://www.buymeacoffee.com/TU_USUARIO_AQUI" target="_blank">
+<a href="https://www.buymeacoffee.com/R4zalas" target="_blank">
   <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41" width="174">
 </a>
 
