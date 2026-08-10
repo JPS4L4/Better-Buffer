@@ -28,6 +28,10 @@ An absolute bare-bones [Quick Start Guide](https://github.com/obsproject/obs-plu
 
 All documentation can be found in the [Plugin Template Wiki](https://github.com/obsproject/obs-plugintemplate/wiki).
 
+Project-specific user documentation:
+
+* [Better Buffer User Manual](MANUAL.md)
+
 Suggested reading to get up and running:
 
 * [Getting started](https://github.com/obsproject/obs-plugintemplate/wiki/Getting-Started)

@@ -2,6 +2,10 @@
 
 #include <obs.h>
 
+#include <atomic>
+#include <mutex>
+#include <string>
+
 /*
 Estado de configuracion de una instancia del filtro Better Buffer.
 Un objeto de esta clase vive por cada fuente donde el usuario aplique
@@ -34,6 +38,18 @@ public:
 	void SetBufferDuration(int seconds);
 	int GetBufferDuration() const;
 
+	void SetEncoderId(const char *encoder_id);
+	const char *GetEncoderId() const;
+
+	void SetBitrateKbps(int bitrate_kbps);
+	int GetBitrateKbps() const;
+
+	void SetUseNativeReplayBridge(bool enabled);
+	bool GetUseNativeReplayBridge() const;
+
+	void SetActive(bool active);
+	bool IsActive() const;
+
 	// Mascara de bits real de OBS: bit 0 = Track 1, bit 1 = Track 2, etc.
 	// Se obtiene de obs_source_get_audio_mixers() sobre la fuente padre.
 	void SetAudioTrackMask(uint32_t mask);
@@ -43,16 +59,38 @@ public:
 	// obs_source_skip_video_filter() en el passthrough de video.
 	void SetSource(obs_source_t *source);
 	obs_source_t *GetSource() const;
+	obs_output_t *GetReplayOutput() const;
 
 	void LogSummary() const;
+	void ApplyConfiguration();
+	void StartPipeline();
+	void StopPipeline();
+	bool IsPipelineActive() const;
 
 private:
+	void ApplyAudioTrackConfiguration();
+	void ApplyReplayBufferConfiguration();
+	void CleanupPipelineResourcesLocked();
+	std::string GetResolvedSavePath() const;
+	std::string ExpandFilePattern(const char *pattern, const char *source_name) const;
+
 	bool enabled_ = true;
 	int buffer_duration_ = 10;
+	int bitrate_kbps_ = 6000;
+	bool use_native_replay_bridge_ = false;
 	uint32_t audio_track_mask_ = 1; // por defecto, Track 1
 	obs_source_t *source_ = nullptr;
 	char file_pattern_[256] = "%SOURCE%_%CCYY-%MM-%DD_%hh-%mm-%ss";
-	char save_path_[512] = "";
+	char save_path_[1024] = "";
+	std::string encoder_id_;
+	obs_view_t *view_ = nullptr;
+	video_t *view_video_ = nullptr;
+	obs_output_t *replay_output_ = nullptr;
+	obs_encoder_t *video_encoder_ = nullptr;
+	obs_encoder_t *audio_encoder_ = nullptr;
+	bool pipeline_active_ = false;
+	std::atomic<bool> is_active_{false};
+	mutable std::mutex pipeline_mutex_;
 };
 
 // Struct que OBS usa para reconocer el filtro. Se registra una sola vez
