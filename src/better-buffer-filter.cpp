@@ -1,4 +1,5 @@
 #include "better-buffer-filter.hpp"
+#include "status-dock.hpp"
 
 #include <obs-module.h>
 #include <obs-frontend-api.h>
@@ -6,13 +7,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
 #include <string>
 #include <time.h>
-#include <cstdio>
 #include <vector>
 
 #ifdef _WIN32
@@ -70,49 +72,123 @@ static std::string GetDefaultVideosDirectory()
 static void OnReplayBufferEvent(enum obs_frontend_event event, void *param)
 {
 	auto *runtime = static_cast<BetterBufferFilterRuntime *>(param);
-	if (!runtime)
+	if (!runtime || event != OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED)
 		return;
 
-	if (event == OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED) {
-		if (!runtime->IsActive()) {
-			obs_log(LOG_INFO,
-				"Better Buffer: ignored global replay save because this source is not active in a live output.");
-			return;
-		}
-
-		obs_output_t *replay_output = runtime->GetReplayOutput();
-		if (!replay_output) {
-			obs_log(LOG_WARNING,
-				"Better Buffer: save event received, but this instance has no dedicated active replay_output.");
-			return;
-		}
-
-		proc_handler_t *proc = obs_output_get_proc_handler(replay_output);
-		if (!proc) {
-			obs_log(LOG_WARNING,
-				"Better Buffer: failed to get replay_output proc_handler to execute save().");
-			obs_output_release(replay_output);
-			return;
-		}
-
-		// Verificación local en headers/source de OBS 31.1.1:
-		// no existe una API pública llamada obs_output_output_replay_buffer_save(...).
-		// El replay_buffer expone proc "save()" en su proc_handler, y esa es la ruta
-		// pública disponible para disparar guardado por instancia.
-		calldata_t cd;
-		calldata_init(&cd);
-		const bool save_called = proc_handler_call(proc, "save", &cd);
-		calldata_free(&cd);
-		obs_output_release(replay_output);
-
-		if (!save_called) {
-			obs_log(LOG_WARNING,
-				"Better Buffer: proc_handler_call(save) returned false for the instance replay_output.");
-			return;
-		}
-
-		obs_log(LOG_INFO, "Better Buffer: save() triggered on this instance dedicated replay_output.");
+	if (!runtime->IsActive()) {
+		obs_log(LOG_INFO,
+			"Better Buffer: ignored global replay save because this source is not active in a live output.");
+		return;
 	}
+
+	obs_output_t *replay_output = runtime->GetReplayOutput();
+	if (!replay_output) {
+		obs_log(LOG_WARNING,
+			"Better Buffer: save event received, but this instance has no dedicated active replay_output.");
+		return;
+	}
+
+	proc_handler_t *proc = obs_output_get_proc_handler(replay_output);
+	if (!proc) {
+		obs_log(LOG_WARNING, "Better Buffer: failed to get replay_output proc_handler to execute save().");
+		obs_output_release(replay_output);
+		return;
+	}
+
+	calldata_t cd;
+	calldata_init(&cd);
+	const bool save_called = proc_handler_call(proc, "save", &cd);
+	calldata_free(&cd);
+	obs_output_release(replay_output);
+
+	if (!save_called) {
+		obs_log(LOG_WARNING,
+			"Better Buffer: proc_handler_call(save) returned false for the instance replay_output.");
+		return;
+	}
+
+	runtime->SetLastStatusMessage("Replay saved");
+	runtime->SetLastOutputPath(runtime->GetSavePath());
+	obs_log(LOG_INFO, "Better Buffer: save() triggered on this instance dedicated replay_output.");
+}
+
+static void TriggerHotkeyCallback(void *data, obs_hotkey_id, obs_hotkey_t *, bool pressed)
+{
+	if (!pressed)
+		return;
+
+	auto *runtime = static_cast<BetterBufferFilterRuntime *>(data);
+	if (runtime)
+		runtime->TriggerReplaySave();
+}
+
+static obs_key_t ParseTriggerKey(const std::string &key_name)
+{
+	if (key_name.empty())
+		return OBS_KEY_NONE;
+
+	std::string normalized = key_name;
+	std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+		       [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+
+	if (normalized == "NONE")
+		return OBS_KEY_NONE;
+	if (normalized == "SPACE")
+		return OBS_KEY_SPACE;
+	if (normalized == "ENTER" || normalized == "RETURN")
+		return OBS_KEY_RETURN;
+	if (normalized == "ESC" || normalized == "ESCAPE")
+		return OBS_KEY_ESCAPE;
+	if (normalized == "TAB")
+		return OBS_KEY_TAB;
+	if (normalized == "BACKSPACE")
+		return OBS_KEY_BACKSPACE;
+	if (normalized == "DELETE")
+		return OBS_KEY_DELETE;
+	if (normalized == "F1")
+		return OBS_KEY_F1;
+	if (normalized == "F2")
+		return OBS_KEY_F2;
+	if (normalized == "F3")
+		return OBS_KEY_F3;
+	if (normalized == "F4")
+		return OBS_KEY_F4;
+	if (normalized == "F5")
+		return OBS_KEY_F5;
+	if (normalized == "F6")
+		return OBS_KEY_F6;
+	if (normalized == "F7")
+		return OBS_KEY_F7;
+	if (normalized == "F8")
+		return OBS_KEY_F8;
+	if (normalized == "F9")
+		return OBS_KEY_F9;
+	if (normalized == "F10")
+		return OBS_KEY_F10;
+	if (normalized == "F11")
+		return OBS_KEY_F11;
+	if (normalized == "F12")
+		return OBS_KEY_F12;
+	if (normalized == "R")
+		return OBS_KEY_R;
+	if (normalized == "T")
+		return OBS_KEY_T;
+	if (normalized == "Y")
+		return OBS_KEY_Y;
+	if (normalized == "Z")
+		return OBS_KEY_Z;
+	if (normalized == "1")
+		return OBS_KEY_1;
+	if (normalized == "2")
+		return OBS_KEY_2;
+	if (normalized == "3")
+		return OBS_KEY_3;
+	if (normalized == "4")
+		return OBS_KEY_4;
+	if (normalized == "5")
+		return OBS_KEY_5;
+
+	return OBS_KEY_NONE;
 }
 
 static std::vector<std::string> GetAvailableVideoEncoderIds()
@@ -172,6 +248,15 @@ static std::string GetPreferredAudioEncoderId(const std::vector<std::string> &en
 	}
 
 	return encoder_ids.empty() ? std::string() : encoder_ids.front();
+}
+
+static size_t GetFirstActiveTrackIndex(uint32_t mask)
+{
+	for (size_t i = 0; i < 6; ++i) {
+		if (mask & (1u << i))
+			return i;
+	}
+	return 0;
 }
 
 static constexpr int kDefaultBitrateKbps = 6000;
@@ -289,6 +374,7 @@ void BetterBufferFilterRuntime::LoadFromSettings(obs_data_t *settings)
 	SetSavePath(obs_data_get_string(settings, "save_path"));
 	SetEncoderId(obs_data_get_string(settings, "encoder_id"));
 	SetBitrateKbps(GetBitrateKbpsFromSettings(settings));
+	SetTriggerKey(obs_data_get_string(settings, "trigger_key"));
 
 	obs_log(LOG_INFO,
 		"Better Buffer: LoadFromSettings -> enabled=%s duration=%d native_bridge=%s audio_track_mask=0x%02X encoder=%s bitrate=%dkbps file_pattern=%s save_path=%s",
@@ -309,6 +395,7 @@ void BetterBufferFilterRuntime::SaveToSettings(obs_data_t *settings) const
 	obs_data_set_string(settings, "filename_pattern", GetFilePattern());
 	obs_data_set_string(settings, "save_path", GetSavePath());
 	obs_data_set_string(settings, "encoder_id", GetEncoderId());
+	obs_data_set_string(settings, "trigger_key", GetTriggerKey());
 
 	obs_log(LOG_INFO,
 		"Better Buffer: SaveToSettings -> enabled=%s duration=%d native_bridge=%s audio_track_mask=0x%02X encoder=%s bitrate=%dkbps file_pattern=%s save_path=%s",
@@ -368,7 +455,11 @@ bool BetterBufferFilterRuntime::GetUseNativeReplayBridge() const
 
 void BetterBufferFilterRuntime::SetActive(bool active)
 {
+	const bool changed = is_active_.load(std::memory_order_relaxed) != active;
 	is_active_.store(active, std::memory_order_relaxed);
+	if (changed && source_) {
+		obs_source_update_properties(source_);
+	}
 }
 
 bool BetterBufferFilterRuntime::IsActive() const
@@ -412,6 +503,111 @@ void BetterBufferFilterRuntime::LogSummary() const
 		audio_track_mask_, GetEncoderId(), GetBitrateKbps());
 }
 
+void BetterBufferFilterRuntime::SetLastStatusMessage(const char *message)
+{
+	last_status_message_ = message ? message : "";
+}
+
+const char *BetterBufferFilterRuntime::GetLastStatusMessage() const
+{
+	return last_status_message_.c_str();
+}
+
+void BetterBufferFilterRuntime::SetLastOutputPath(const char *path)
+{
+	last_output_path_ = path ? path : "";
+}
+
+const char *BetterBufferFilterRuntime::GetLastOutputPath() const
+{
+	return last_output_path_.c_str();
+}
+
+void BetterBufferFilterRuntime::SetTriggerKey(const char *key_name)
+{
+	trigger_key_name_ = key_name ? key_name : "";
+	UpdateTriggerHotkeyBinding();
+}
+
+const char *BetterBufferFilterRuntime::GetTriggerKey() const
+{
+	return trigger_key_name_.c_str();
+}
+
+obs_hotkey_id BetterBufferFilterRuntime::GetTriggerHotkeyIdForDestroy() const
+{
+	return trigger_hotkey_id_;
+}
+
+void BetterBufferFilterRuntime::ResetTriggerHotkeyId()
+{
+	trigger_hotkey_id_ = OBS_INVALID_HOTKEY_ID;
+}
+
+void BetterBufferFilterRuntime::UpdateTriggerHotkeyBinding()
+{
+	if (!source_)
+		return;
+
+	if (trigger_hotkey_id_ == OBS_INVALID_HOTKEY_ID) {
+		trigger_hotkey_id_ = obs_hotkey_register_source(source_, "BetterBuffer.Trigger",
+								"Better Buffer trigger", TriggerHotkeyCallback, this);
+	}
+
+	if (trigger_hotkey_id_ == OBS_INVALID_HOTKEY_ID)
+		return;
+
+	if (trigger_key_name_.empty()) {
+		obs_hotkey_load_bindings(trigger_hotkey_id_, nullptr, 0);
+		return;
+	}
+
+	obs_key_combination_t combo{};
+	combo.key = ParseTriggerKey(trigger_key_name_);
+	combo.modifiers = 0;
+	obs_hotkey_load_bindings(trigger_hotkey_id_, &combo, 1);
+}
+
+bool BetterBufferFilterRuntime::TriggerReplaySave()
+{
+	if (!IsActive()) {
+		obs_log(LOG_INFO, "Better Buffer: ignored trigger because this source is not active in a live output.");
+		return false;
+	}
+
+	obs_output_t *replay_output = GetReplayOutput();
+	if (!replay_output) {
+		obs_log(LOG_WARNING,
+			"Better Buffer: trigger received, but this instance has no dedicated active replay_output.");
+		return false;
+	}
+
+	proc_handler_t *proc = obs_output_get_proc_handler(replay_output);
+	if (!proc) {
+		obs_log(LOG_WARNING,
+			"Better Buffer: failed to get replay_output proc_handler to execute trigger save().");
+		obs_output_release(replay_output);
+		return false;
+	}
+
+	calldata_t cd;
+	calldata_init(&cd);
+	const bool save_called = proc_handler_call(proc, "save", &cd);
+	calldata_free(&cd);
+	obs_output_release(replay_output);
+
+	if (!save_called) {
+		obs_log(LOG_WARNING, "Better Buffer: trigger could not invoke save() on the instance replay_output.");
+		return false;
+	}
+
+	SetLastStatusMessage("Replay saved");
+	SetLastOutputPath(GetSavePath());
+	if (source_)
+		obs_source_update_properties(source_);
+	return true;
+}
+
 void BetterBufferFilterRuntime::ApplyConfiguration()
 {
 	ApplyAudioTrackConfiguration();
@@ -453,9 +649,28 @@ void BetterBufferFilterRuntime::CleanupPipelineResourcesLocked()
 void BetterBufferFilterRuntime::StartPipeline()
 {
 	std::lock_guard<std::mutex> lock(pipeline_mutex_);
+	StartPipelineLocked();
+}
 
+void BetterBufferFilterRuntime::RestartPipeline()
+{
+	std::lock_guard<std::mutex> lock(pipeline_mutex_);
+	if (!pipeline_active_)
+		return;
+	StopPipelineLocked();
+	StartPipelineLocked();
+}
+
+void BetterBufferFilterRuntime::StartPipelineLocked()
+{
 	if (pipeline_active_)
 		return;
+
+	if (!enabled_ || use_native_replay_bridge_) {
+		obs_log(LOG_INFO,
+			"Better Buffer: StartPipeline skipped because the filter is disabled or running in legacy mode.");
+		return;
+	}
 
 	// Primero se valida el parent: sin fuente padre no existe objetivo para el view.
 	obs_source_t *parent = GetSource() ? obs_filter_get_parent(GetSource()) : nullptr;
@@ -508,7 +723,8 @@ void BetterBufferFilterRuntime::StartPipeline()
 	obs_data_set_int(output_settings, "max_time_sec", buffer_duration_);
 	obs_data_set_int(output_settings, "max_size_mb", 0);
 	obs_data_set_string(output_settings, "directory", GetResolvedSavePath().c_str());
-	obs_data_set_string(output_settings, "format", GetFilePattern());
+	const std::string output_format = ExpandFilePattern(GetFilePattern(), obs_source_get_name(parent));
+	obs_data_set_string(output_settings, "format", output_format.c_str());
 	obs_data_set_string(output_settings, "extension", "mp4");
 
 	char replay_output_name[128];
@@ -534,15 +750,7 @@ void BetterBufferFilterRuntime::StartPipeline()
 		return;
 	}
 
-	size_t mixer_idx = 0;
-	if (audio_track_mask_ != 0) {
-		for (size_t i = 0; i < 6; ++i) {
-			if (audio_track_mask_ & (1u << i)) {
-				mixer_idx = i;
-				break;
-			}
-		}
-	}
+	size_t mixer_idx = GetFirstActiveTrackIndex(audio_track_mask_);
 
 	if ((audio_track_mask_ & (audio_track_mask_ - 1u)) != 0u) {
 		// TODO(Fase 2): obs_audio_encoder_create selecciona un solo mixer_idx.
@@ -589,15 +797,22 @@ void BetterBufferFilterRuntime::StartPipeline()
 	}
 
 	pipeline_active_ = true;
+	SetLastStatusMessage("Ready");
+	BetterBufferStatusDock::SetMessage("Ready");
 	obs_log(LOG_INFO,
-		"Better Buffer: dedicated pipeline started for source '%s' (encoder=%s bitrate=%dkbps duration=%ds).",
-		obs_source_get_name(parent), video_encoder_id, bitrate_kbps_, buffer_duration_);
+		"Better Buffer: dedicated pipeline started for source '%s' (encoder=%s bitrate=%dkbps duration=%ds audio_track_mask=0x%02X selected_mixer_idx=%zu).",
+		obs_source_get_name(parent), video_encoder_id, bitrate_kbps_, buffer_duration_, audio_track_mask_,
+		mixer_idx);
 }
 
 void BetterBufferFilterRuntime::StopPipeline()
 {
 	std::lock_guard<std::mutex> lock(pipeline_mutex_);
+	StopPipelineLocked();
+}
 
+void BetterBufferFilterRuntime::StopPipelineLocked()
+{
 	if (!pipeline_active_)
 		return;
 
@@ -612,6 +827,8 @@ void BetterBufferFilterRuntime::StopPipeline()
 	// El resto se libera en inverso a la creación para evitar punteros colgantes.
 	CleanupPipelineResourcesLocked();
 	pipeline_active_ = false;
+	SetLastStatusMessage("Stopped");
+	BetterBufferStatusDock::SetMessage("Stopped");
 	obs_log(LOG_INFO, "Better Buffer: dedicated pipeline stopped and released.");
 }
 
@@ -733,15 +950,23 @@ void BetterBufferFilterRuntime::ApplyAudioTrackConfiguration()
 		return;
 	}
 
-	obs_source_set_audio_mixers(parent_source, audio_track_mask_);
-	obs_log(LOG_INFO, "Better Buffer: applying audio_track_mask=0x%02X to source %s", audio_track_mask_,
-		obs_source_get_name(parent_source));
+	const uint32_t selected_mask = audio_track_mask_ != 0 ? audio_track_mask_ : 1u;
+	const size_t selected_mixer_idx = GetFirstActiveTrackIndex(selected_mask);
+	obs_log(LOG_INFO,
+		"Better Buffer: dedicated pipeline will use audio_track_mask=0x%02X (track %zu) for source %s",
+		selected_mask, selected_mixer_idx + 1, obs_source_get_name(parent_source));
 }
 
 void BetterBufferFilterRuntime::ApplyReplayBufferConfiguration()
 {
 	if (!enabled_)
 		return;
+
+	if (use_native_replay_bridge_) {
+		obs_log(LOG_INFO,
+			"Better Buffer: legacy native replay bridge enabled; dedicated pipeline remains inactive for this instance.");
+		return;
+	}
 
 	obs_log(LOG_INFO,
 		"Better Buffer: configuration loaded for dedicated pipeline (obs_frontend_get_replay_buffer_output is not used).");
@@ -766,6 +991,8 @@ static void better_buffer_activate(void *data)
 	obs_log(LOG_INFO,
 		"Better Buffer: source '%s' ACTIVATED because it is present in the current scene; starting dedicated pipeline.",
 		parent_source ? obs_source_get_name(parent_source) : "<no source>");
+	runtime->SetLastStatusMessage("Waiting for output");
+	BetterBufferStatusDock::SetMessage("Waiting for output");
 	runtime->StartPipeline();
 }
 
@@ -778,6 +1005,8 @@ static void better_buffer_deactivate(void *data)
 	obs_source_t *parent_source = runtime->GetSource() ? obs_filter_get_parent(runtime->GetSource()) : nullptr;
 	runtime->StopPipeline();
 	runtime->SetActive(false);
+	runtime->SetLastStatusMessage("Inactive");
+	BetterBufferStatusDock::SetMessage("Inactive");
 	obs_log(LOG_INFO,
 		"Better Buffer: source '%s' DEACTIVATED because it is no longer present in the current scene; stopping dedicated pipeline.",
 		parent_source ? obs_source_get_name(parent_source) : "<no source>");
@@ -797,10 +1026,7 @@ static void better_buffer_update(void *data, obs_data_t *settings)
 	ValidateEncoderSettings(settings);
 	runtime->LoadFromSettings(settings);
 	runtime->ApplyConfiguration();
-	if (runtime->IsPipelineActive()) {
-		runtime->StopPipeline();
-		runtime->StartPipeline();
-	}
+	runtime->RestartPipeline();
 	runtime->LogSummary();
 }
 
@@ -838,9 +1064,15 @@ static void *better_buffer_create(obs_data_t *settings, obs_source_t *source)
 	else
 		runtime->SetActive(false);
 
+	BetterBufferStatusDock::Init();
 	obs_frontend_add_event_callback(OnReplayBufferEvent, runtime);
 	runtime->LoadFromSettings(settings);
 	runtime->ApplyConfiguration();
+	if (obs_frontend_streaming_active() || obs_frontend_recording_active()) {
+		runtime->SetLastStatusMessage("Output active");
+		BetterBufferStatusDock::SetMessage("Output active");
+		runtime->StartPipeline();
+	}
 	return runtime;
 }
 
@@ -850,10 +1082,16 @@ static void better_buffer_destroy(void *data)
 	if (!runtime)
 		return;
 
+	if (runtime->GetTriggerHotkeyIdForDestroy() != OBS_INVALID_HOTKEY_ID) {
+		obs_hotkey_unregister(runtime->GetTriggerHotkeyIdForDestroy());
+		runtime->ResetTriggerHotkeyId();
+	}
+
 	if (runtime->IsActive())
 		runtime->StopPipeline();
 
 	obs_frontend_remove_event_callback(OnReplayBufferEvent, runtime);
+	BetterBufferStatusDock::Shutdown();
 	delete runtime;
 }
 
@@ -867,6 +1105,7 @@ static void better_buffer_defaults(obs_data_t *settings)
 	obs_data_set_default_string(settings, "bitrate_kbps", "6000");
 	obs_data_set_default_string(settings, "filename_pattern", "%SOURCE%_%CCYY-%MM-%DD_%hh-%mm-%ss");
 	obs_data_set_default_string(settings, "save_path", default_path.c_str());
+	obs_data_set_default_string(settings, "trigger_key", "");
 
 	const std::string preferred_encoder = GetPreferredVideoEncoderId(GetAvailableVideoEncoderIds());
 	obs_data_set_default_string(settings, "encoder_id", preferred_encoder.c_str());
@@ -888,9 +1127,13 @@ static obs_properties_t *better_buffer_properties(void *data)
 	obs_property_text_set_info_word_wrap(pipeline_status, true);
 	obs_property_set_long_description(
 		pipeline_status,
-		"Architecture goal: each source with Better Buffer should have its own dedicated pipeline (view/output/encoder) instead of sharing global replay.");
+		"Recommended setup: keep legacy mode off for a dedicated, per-source replay pipeline. This avoids sharing OBS global replay state and keeps each instance isolated.");
 
-	obs_properties_add_int_slider(props, "buffer_duration", "Clip duration (seconds)", 5, 300, 5);
+	obs_property_t *buffer_duration =
+		obs_properties_add_int_slider(props, "buffer_duration", "Clip duration (seconds)", 5, 300, 5);
+	obs_property_set_long_description(
+		buffer_duration,
+		"How long the replay buffer should stay available before saving. Larger values use more memory and CPU.");
 
 	auto *runtime = static_cast<BetterBufferFilterRuntime *>(data);
 	obs_property_t *encoder_list = obs_properties_add_list(props, "encoder_id", "Preferred encoder for clips",
@@ -968,6 +1211,9 @@ static obs_properties_t *better_buffer_properties(void *data)
 
 	obs_property_t *parent_source_property =
 		obs_properties_add_text(props, "parent_source_name", "Attached source", OBS_TEXT_INFO);
+	obs_property_set_long_description(
+		parent_source_property,
+		"This is the source that Better Buffer is watching. If you change scenes or sources, the status updates automatically.");
 	obs_property_set_enabled(parent_source_property, false);
 	obs_property_text_set_info_type(parent_source_property, OBS_TEXT_INFO_NORMAL);
 	obs_property_text_set_info_word_wrap(parent_source_property, true);
@@ -976,9 +1222,58 @@ static obs_properties_t *better_buffer_properties(void *data)
 		obs_properties_add_text(props, "filename_pattern", "File name pattern", OBS_TEXT_DEFAULT);
 	obs_property_set_long_description(
 		pattern_property,
-		"Supported variables: %SOURCE% (source name), %CCYY% (year), %MM% (month), %DD% (day), %hh% (hour), %mm% (minute), %ss% (second).");
+		"Use tokens like %SOURCE%, %CCYY%, %MM%, %DD%, %hh%, %mm% and %ss% to build a clear, consistent output name.");
 
-	obs_properties_add_path(props, "save_path", "Export path", OBS_PATH_DIRECTORY, nullptr, nullptr);
+	obs_property_t *save_path =
+		obs_properties_add_path(props, "save_path", "Export path", OBS_PATH_DIRECTORY, nullptr, nullptr);
+	obs_property_t *trigger_key = obs_properties_add_list(props, "trigger_key", "Trigger key", OBS_COMBO_TYPE_LIST,
+							      OBS_COMBO_FORMAT_STRING);
+	obs_property_set_long_description(
+		trigger_key,
+		"Choose a keyboard key for this filter instance. When pressed, it triggers a replay save for the dedicated pipeline.");
+	obs_property_list_add_string(trigger_key, "None", "");
+	obs_property_list_add_string(trigger_key, "Space", "SPACE");
+	obs_property_list_add_string(trigger_key, "Enter", "RETURN");
+	obs_property_list_add_string(trigger_key, "F1", "F1");
+	obs_property_list_add_string(trigger_key, "F2", "F2");
+	obs_property_list_add_string(trigger_key, "F3", "F3");
+	obs_property_list_add_string(trigger_key, "F4", "F4");
+	obs_property_list_add_string(trigger_key, "F5", "F5");
+	obs_property_list_add_string(trigger_key, "F6", "F6");
+	obs_property_list_add_string(trigger_key, "F7", "F7");
+	obs_property_list_add_string(trigger_key, "F8", "F8");
+	obs_property_list_add_string(trigger_key, "F9", "F9");
+	obs_property_list_add_string(trigger_key, "F10", "F10");
+	obs_property_list_add_string(trigger_key, "F11", "F11");
+	obs_property_list_add_string(trigger_key, "F12", "F12");
+	obs_property_list_add_string(trigger_key, "R", "R");
+	obs_property_list_add_string(trigger_key, "T", "T");
+	obs_property_list_add_string(trigger_key, "Y", "Y");
+	obs_property_list_add_string(trigger_key, "Z", "Z");
+	obs_property_t *status_property =
+		obs_properties_add_text(props, "status_message", "Current status", OBS_TEXT_INFO);
+	obs_property_set_enabled(status_property, false);
+	obs_property_set_long_description(
+		save_path, "Folder where clips are exported. If left empty, Better Buffer uses your Videos folder.");
+	if (runtime) {
+		std::string status_summary;
+		if (runtime->IsActive()) {
+			status_summary = "Active (this source is in a live output)";
+		} else {
+			status_summary = "Inactive (this source is not currently being streamed/recorded)";
+		}
+		if (runtime->GetLastStatusMessage()[0] != '\0') {
+			status_summary += "\n";
+			status_summary += runtime->GetLastStatusMessage();
+		}
+
+		if (runtime->GetLastStatusMessage()[0] != '\0') {
+			status_summary += "\nOutput: ";
+			status_summary += runtime->GetLastOutputPath();
+		}
+
+		obs_property_set_long_description(status_property, status_summary.c_str());
+	}
 
 	return props;
 }
