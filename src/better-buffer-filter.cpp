@@ -123,220 +123,6 @@ static void TriggerHotkeyCallback(void *data, obs_hotkey_id, obs_hotkey_t *, boo
 		runtime->TriggerReplaySave();
 }
 
-static bool ParseTriggerCombo(const std::string &combo_text, obs_key_combination_t *combo)
-{
-	if (!combo)
-		return false;
-
-	combo->modifiers = 0;
-	combo->key = OBS_KEY_NONE;
-
-	if (combo_text.empty())
-		return false;
-
-	std::string input = combo_text;
-	input.erase(std::remove_if(input.begin(), input.end(), [](unsigned char ch) { return std::isspace(ch) != 0; }),
-		    input.end());
-	if (input.empty())
-		return false;
-
-	std::stringstream stream(input);
-	std::string token;
-	std::vector<std::string> parts;
-	while (std::getline(stream, token, '+')) {
-		if (!token.empty())
-			parts.push_back(token);
-	}
-	if (parts.empty())
-		return false;
-
-	auto normalize = [](std::string value) {
-		std::transform(value.begin(), value.end(), value.begin(),
-			       [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
-		return value;
-	};
-
-	for (const auto &part : parts) {
-		const std::string normalized = normalize(part);
-		if (normalized == "CTRL" || normalized == "CONTROL") {
-			combo->modifiers |= INTERACT_CONTROL_KEY;
-		} else if (normalized == "SHIFT") {
-			combo->modifiers |= INTERACT_SHIFT_KEY;
-		} else if (normalized == "ALT") {
-			combo->modifiers |= INTERACT_ALT_KEY;
-		} else if (normalized == "CMD" || normalized == "COMMAND" || normalized == "META" ||
-			   normalized == "SUPER") {
-			combo->modifiers |= INTERACT_COMMAND_KEY;
-		} else {
-			if (combo->key != OBS_KEY_NONE)
-				return false;
-
-			if (normalized == "NONE")
-				combo->key = OBS_KEY_NONE;
-			else if (normalized == "SPACE")
-				combo->key = OBS_KEY_SPACE;
-			else if (normalized == "ENTER" || normalized == "RETURN")
-				combo->key = OBS_KEY_RETURN;
-			else if (normalized == "ESC" || normalized == "ESCAPE")
-				combo->key = OBS_KEY_ESCAPE;
-			else if (normalized == "TAB")
-				combo->key = OBS_KEY_TAB;
-			else if (normalized == "BACKSPACE")
-				combo->key = OBS_KEY_BACKSPACE;
-			else if (normalized == "DELETE")
-				combo->key = OBS_KEY_DELETE;
-			else if (normalized == "PAUSE")
-				combo->key = OBS_KEY_PAUSE;
-			else if (normalized == "PRINT")
-				combo->key = OBS_KEY_PRINT;
-			else if (normalized == "HOME")
-				combo->key = OBS_KEY_HOME;
-			else if (normalized == "END")
-				combo->key = OBS_KEY_END;
-			else if (normalized == "LEFT")
-				combo->key = OBS_KEY_LEFT;
-			else if (normalized == "UP")
-				combo->key = OBS_KEY_UP;
-			else if (normalized == "RIGHT")
-				combo->key = OBS_KEY_RIGHT;
-			else if (normalized == "DOWN")
-				combo->key = OBS_KEY_DOWN;
-			else if (normalized == "PAGEUP")
-				combo->key = OBS_KEY_PAGEUP;
-			else if (normalized == "PAGEDOWN")
-				combo->key = OBS_KEY_PAGEDOWN;
-			else if (normalized == "F1")
-				combo->key = OBS_KEY_F1;
-			else if (normalized == "F2")
-				combo->key = OBS_KEY_F2;
-			else if (normalized == "F3")
-				combo->key = OBS_KEY_F3;
-			else if (normalized == "F4")
-				combo->key = OBS_KEY_F4;
-			else if (normalized == "F5")
-				combo->key = OBS_KEY_F5;
-			else if (normalized == "F6")
-				combo->key = OBS_KEY_F6;
-			else if (normalized == "F7")
-				combo->key = OBS_KEY_F7;
-			else if (normalized == "F8")
-				combo->key = OBS_KEY_F8;
-			else if (normalized == "F9")
-				combo->key = OBS_KEY_F9;
-			else if (normalized == "F10")
-				combo->key = OBS_KEY_F10;
-			else if (normalized == "F11")
-				combo->key = OBS_KEY_F11;
-			else if (normalized == "F12")
-				combo->key = OBS_KEY_F12;
-			else if (normalized == "A")
-				combo->key = OBS_KEY_A;
-			else if (normalized == "B")
-				combo->key = OBS_KEY_B;
-			else if (normalized == "C")
-				combo->key = OBS_KEY_C;
-			else if (normalized == "D")
-				combo->key = OBS_KEY_D;
-			else if (normalized == "E")
-				combo->key = OBS_KEY_E;
-			else if (normalized == "F")
-				combo->key = OBS_KEY_F;
-			else if (normalized == "G")
-				combo->key = OBS_KEY_G;
-			else if (normalized == "H")
-				combo->key = OBS_KEY_H;
-			else if (normalized == "I")
-				combo->key = OBS_KEY_I;
-			else if (normalized == "J")
-				combo->key = OBS_KEY_J;
-			else if (normalized == "K")
-				combo->key = OBS_KEY_K;
-			else if (normalized == "L")
-				combo->key = OBS_KEY_L;
-			else if (normalized == "M")
-				combo->key = OBS_KEY_M;
-			else if (normalized == "N")
-				combo->key = OBS_KEY_N;
-			else if (normalized == "O")
-				combo->key = OBS_KEY_O;
-			else if (normalized == "P")
-				combo->key = OBS_KEY_P;
-			else if (normalized == "Q")
-				combo->key = OBS_KEY_Q;
-			else if (normalized == "R")
-				combo->key = OBS_KEY_R;
-			else if (normalized == "S")
-				combo->key = OBS_KEY_S;
-			else if (normalized == "T")
-				combo->key = OBS_KEY_T;
-			else if (normalized == "U")
-				combo->key = OBS_KEY_U;
-			else if (normalized == "V")
-				combo->key = OBS_KEY_V;
-			else if (normalized == "W")
-				combo->key = OBS_KEY_W;
-			else if (normalized == "X")
-				combo->key = OBS_KEY_X;
-			else if (normalized == "Y")
-				combo->key = OBS_KEY_Y;
-			else if (normalized == "Z")
-				combo->key = OBS_KEY_Z;
-			else if (normalized == "0")
-				combo->key = OBS_KEY_0;
-			else if (normalized == "1")
-				combo->key = OBS_KEY_1;
-			else if (normalized == "2")
-				combo->key = OBS_KEY_2;
-			else if (normalized == "3")
-				combo->key = OBS_KEY_3;
-			else if (normalized == "4")
-				combo->key = OBS_KEY_4;
-			else if (normalized == "5")
-				combo->key = OBS_KEY_5;
-			else if (normalized == "6")
-				combo->key = OBS_KEY_6;
-			else if (normalized == "7")
-				combo->key = OBS_KEY_7;
-			else if (normalized == "8")
-				combo->key = OBS_KEY_8;
-			else if (normalized == "9")
-				combo->key = OBS_KEY_9;
-			else if (normalized == "?" || normalized == "¿")
-				combo->key = OBS_KEY_QUESTION;
-			else if (normalized == "¿")
-				combo->key = OBS_KEY_QUESTIONDOWN;
-			else if (normalized == ".")
-				combo->key = OBS_KEY_PERIOD;
-			else if (normalized == ",")
-				combo->key = OBS_KEY_COMMA;
-			else if (normalized == ";")
-				combo->key = OBS_KEY_SEMICOLON;
-			else if (normalized == ":")
-				combo->key = OBS_KEY_COLON;
-			else if (normalized == "-")
-				combo->key = OBS_KEY_MINUS;
-			else if (normalized == "=")
-				combo->key = OBS_KEY_EQUAL;
-			else if (normalized == "[")
-				combo->key = OBS_KEY_BRACKETLEFT;
-			else if (normalized == "]")
-				combo->key = OBS_KEY_BRACKETRIGHT;
-			else if (normalized == "\\")
-				combo->key = OBS_KEY_BACKSLASH;
-			else if (normalized == "/")
-				combo->key = OBS_KEY_SLASH;
-			else if (normalized == "'")
-				combo->key = OBS_KEY_QUOTE;
-			else if (normalized == "`")
-				combo->key = OBS_KEY_QUOTELEFT;
-			else
-				return false;
-		}
-	}
-
-	return combo->key != OBS_KEY_NONE || combo->modifiers != 0;
-}
-
 static std::vector<std::string> GetAvailableVideoEncoderIds()
 {
 	std::vector<std::string> encoder_ids;
@@ -520,7 +306,7 @@ void BetterBufferFilterRuntime::LoadFromSettings(obs_data_t *settings)
 	SetSavePath(obs_data_get_string(settings, "save_path"));
 	SetEncoderId(obs_data_get_string(settings, "encoder_id"));
 	SetBitrateKbps(GetBitrateKbpsFromSettings(settings));
-	SetTriggerKey(obs_data_get_string(settings, "trigger_key"));
+	UpdateTriggerHotkeyBinding();
 
 	obs_log(LOG_INFO,
 		"Better Buffer: LoadFromSettings -> enabled=%s duration=%d native_bridge=%s audio_track_mask=0x%02X encoder=%s bitrate=%dkbps file_pattern=%s save_path=%s",
@@ -541,7 +327,6 @@ void BetterBufferFilterRuntime::SaveToSettings(obs_data_t *settings) const
 	obs_data_set_string(settings, "filename_pattern", GetFilePattern());
 	obs_data_set_string(settings, "save_path", GetSavePath());
 	obs_data_set_string(settings, "encoder_id", GetEncoderId());
-	obs_data_set_string(settings, "trigger_key", GetTriggerKey());
 
 	obs_log(LOG_INFO,
 		"Better Buffer: SaveToSettings -> enabled=%s duration=%d native_bridge=%s audio_track_mask=0x%02X encoder=%s bitrate=%dkbps file_pattern=%s save_path=%s",
@@ -669,17 +454,6 @@ const char *BetterBufferFilterRuntime::GetLastOutputPath() const
 	return last_output_path_.c_str();
 }
 
-void BetterBufferFilterRuntime::SetTriggerKey(const char *key_name)
-{
-	trigger_key_name_ = key_name ? key_name : "";
-	UpdateTriggerHotkeyBinding();
-}
-
-const char *BetterBufferFilterRuntime::GetTriggerKey() const
-{
-	return trigger_key_name_.c_str();
-}
-
 obs_hotkey_id BetterBufferFilterRuntime::GetTriggerHotkeyIdForDestroy() const
 {
 	return trigger_hotkey_id_;
@@ -702,18 +476,6 @@ void BetterBufferFilterRuntime::UpdateTriggerHotkeyBinding()
 
 	if (trigger_hotkey_id_ == OBS_INVALID_HOTKEY_ID)
 		return;
-
-	if (trigger_key_name_.empty()) {
-		obs_hotkey_load_bindings(trigger_hotkey_id_, nullptr, 0);
-		return;
-	}
-
-	obs_key_combination_t combo{};
-	if (!ParseTriggerCombo(trigger_key_name_, &combo)) {
-		obs_hotkey_load_bindings(trigger_hotkey_id_, nullptr, 0);
-		return;
-	}
-	obs_hotkey_load_bindings(trigger_hotkey_id_, &combo, 1);
 }
 
 bool BetterBufferFilterRuntime::TriggerReplaySave()
@@ -1253,7 +1015,6 @@ static void better_buffer_defaults(obs_data_t *settings)
 	obs_data_set_default_string(settings, "bitrate_kbps", "6000");
 	obs_data_set_default_string(settings, "filename_pattern", "%SOURCE%_%CCYY-%MM-%DD_%hh-%mm-%ss");
 	obs_data_set_default_string(settings, "save_path", default_path.c_str());
-	obs_data_set_default_string(settings, "trigger_key", "");
 
 	const std::string preferred_encoder = GetPreferredVideoEncoderId(GetAvailableVideoEncoderIds());
 	obs_data_set_default_string(settings, "encoder_id", preferred_encoder.c_str());
@@ -1374,11 +1135,14 @@ static obs_properties_t *better_buffer_properties(void *data)
 
 	obs_property_t *save_path =
 		obs_properties_add_path(props, "save_path", "Export path", OBS_PATH_DIRECTORY, nullptr, nullptr);
-	obs_property_t *trigger_key = obs_properties_add_text(props, "trigger_key", "Trigger combo", OBS_TEXT_DEFAULT);
-	OBS_COMBO_FORMAT_STRING;
+	obs_property_t *trigger_key_info =
+		obs_properties_add_text(props, "trigger_key_info", "Trigger combo", OBS_TEXT_INFO);
+	obs_property_set_enabled(trigger_key_info, false);
+	obs_property_text_set_info_type(trigger_key_info, OBS_TEXT_INFO_NORMAL);
+	obs_property_text_set_info_word_wrap(trigger_key_info, true);
 	obs_property_set_long_description(
-		trigger_key,
-		"Enter a custom combo such as Ctrl+Shift+F12, Alt+?, Ctrl+Alt+Space, or Shift+¿. Leave it empty to disable the trigger.");
+		trigger_key_info,
+		"Set this shortcut in OBS Settings > Hotkeys. Search for 'Better Buffer trigger' under this source and press the keys directly so OBS captures the real key order and modifiers.");
 	obs_property_t *status_property =
 		obs_properties_add_text(props, "status_message", "Current status", OBS_TEXT_INFO);
 	obs_property_set_enabled(status_property, false);

@@ -72,8 +72,6 @@ public:
 	const char *GetLastStatusMessage() const;
 	void SetLastOutputPath(const char *path);
 	const char *GetLastOutputPath() const;
-	void SetTriggerKey(const char *key_name);
-	const char *GetTriggerKey() const;
 	bool TriggerReplaySave();
 	void UpdateTriggerHotkeyBinding();
 	obs_hotkey_id GetTriggerHotkeyIdForDestroy() const;
@@ -106,7 +104,6 @@ private:
 	std::atomic<bool> is_active_{false};
 	std::string last_status_message_;
 	std::string last_output_path_;
-	std::string trigger_key_name_;
 	obs_hotkey_id trigger_hotkey_id_ = OBS_INVALID_HOTKEY_ID;
 	mutable std::mutex pipeline_mutex_;
 };
