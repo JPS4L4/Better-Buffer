@@ -72,6 +72,7 @@ public:
 	const char *GetLastStatusMessage() const;
 	void SetLastOutputPath(const char *path);
 	const char *GetLastOutputPath() const;
+	void NotifyReplaySaved();
 	bool TriggerReplaySave();
 	void UpdateTriggerHotkeyBinding();
 	obs_hotkey_id GetTriggerHotkeyIdForDestroy() const;
@@ -80,6 +81,8 @@ public:
 private:
 	void ApplyAudioTrackConfiguration();
 	void ApplyReplayBufferConfiguration();
+	void LoadTriggerHotkeyFromSettings(obs_data_t *settings);
+	void SaveTriggerHotkeyToSettings(obs_data_t *settings) const;
 	void CleanupPipelineResourcesLocked();
 	void StartPipelineLocked();
 	void StopPipelineLocked();

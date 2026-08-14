@@ -20,6 +20,7 @@
 
 #ifdef _WIN32
 #include <Shlobj.h>
+#include <shellapi.h>
 #include <windows.h>
 #endif
 
@@ -70,6 +71,70 @@ static std::string GetDefaultVideosDirectory()
 #endif
 }
 
+#ifdef _WIN32
+static std::wstring Utf8ToWide(const char *text)
+{
+	if (!text || !*text)
+		return std::wstring();
+
+	const int needed = MultiByteToWideChar(CP_UTF8, 0, text, -1, nullptr, 0);
+	if (needed <= 0)
+		return std::wstring();
+
+	std::wstring wide_text(static_cast<size_t>(needed), L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, text, -1, wide_text.data(), needed);
+	if (!wide_text.empty() && wide_text.back() == L'\0')
+		wide_text.pop_back();
+
+	return wide_text;
+}
+
+static void ShowCaptureSavedPopupWindows()
+{
+	HWND notify_hwnd = GetActiveWindow();
+	if (!notify_hwnd)
+		notify_hwnd = GetForegroundWindow();
+	if (!notify_hwnd)
+		notify_hwnd = GetConsoleWindow();
+	if (!notify_hwnd)
+		return;
+
+	NOTIFYICONDATAW nid = {};
+	nid.cbSize = sizeof(nid);
+	nid.hWnd = notify_hwnd;
+	nid.uID = 0xBB01;
+	nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+	nid.uCallbackMessage = WM_APP + 1;
+	nid.hIcon = LoadIconW(nullptr, IDI_INFORMATION);
+	wcsncpy_s(nid.szTip, L"Better Buffer", _TRUNCATE);
+
+	if (!Shell_NotifyIconW(NIM_ADD, &nid))
+		return;
+
+	std::time_t now = std::time(nullptr);
+	std::tm tm_info{};
+#ifdef _WIN32
+	localtime_s(&tm_info, &now);
+#else
+	localtime_r(&now, &tm_info);
+#endif
+
+	char timestamp[32];
+	std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &tm_info);
+
+	std::wstring message = L"Save Succeed\n";
+	message += Utf8ToWide(timestamp);
+
+	nid.uFlags = NIF_INFO;
+	nid.dwInfoFlags = NIIF_INFO;
+	nid.uTimeout = 2500;
+	wcsncpy_s(nid.szInfoTitle, L"Better Buffer", _TRUNCATE);
+	wcsncpy_s(nid.szInfo, message.c_str(), _TRUNCATE);
+	Shell_NotifyIconW(NIM_MODIFY, &nid);
+	Shell_NotifyIconW(NIM_DELETE, &nid);
+}
+#endif
+
 static void OnReplayBufferEvent(enum obs_frontend_event event, void *param)
 {
 	auto *runtime = static_cast<BetterBufferFilterRuntime *>(param);
@@ -108,8 +173,7 @@ static void OnReplayBufferEvent(enum obs_frontend_event event, void *param)
 		return;
 	}
 
-	runtime->SetLastStatusMessage("Replay saved");
-	runtime->SetLastOutputPath(runtime->GetSavePath());
+	runtime->NotifyReplaySaved();
 	obs_log(LOG_INFO, "Better Buffer: save() triggered on this instance dedicated replay_output.");
 }
 
@@ -307,6 +371,7 @@ void BetterBufferFilterRuntime::LoadFromSettings(obs_data_t *settings)
 	SetEncoderId(obs_data_get_string(settings, "encoder_id"));
 	SetBitrateKbps(GetBitrateKbpsFromSettings(settings));
 	UpdateTriggerHotkeyBinding();
+	LoadTriggerHotkeyFromSettings(settings);
 
 	obs_log(LOG_INFO,
 		"Better Buffer: LoadFromSettings -> enabled=%s duration=%d native_bridge=%s audio_track_mask=0x%02X encoder=%s bitrate=%dkbps file_pattern=%s save_path=%s",
@@ -327,6 +392,7 @@ void BetterBufferFilterRuntime::SaveToSettings(obs_data_t *settings) const
 	obs_data_set_string(settings, "filename_pattern", GetFilePattern());
 	obs_data_set_string(settings, "save_path", GetSavePath());
 	obs_data_set_string(settings, "encoder_id", GetEncoderId());
+	SaveTriggerHotkeyToSettings(settings);
 
 	obs_log(LOG_INFO,
 		"Better Buffer: SaveToSettings -> enabled=%s duration=%d native_bridge=%s audio_track_mask=0x%02X encoder=%s bitrate=%dkbps file_pattern=%s save_path=%s",
@@ -464,6 +530,32 @@ void BetterBufferFilterRuntime::ResetTriggerHotkeyId()
 	trigger_hotkey_id_ = OBS_INVALID_HOTKEY_ID;
 }
 
+void BetterBufferFilterRuntime::LoadTriggerHotkeyFromSettings(obs_data_t *settings)
+{
+	if (!settings || trigger_hotkey_id_ == OBS_INVALID_HOTKEY_ID)
+		return;
+
+	obs_data_array_t *hotkey_data = obs_data_get_array(settings, "trigger_hotkey");
+	if (!hotkey_data)
+		return;
+
+	obs_hotkey_load(trigger_hotkey_id_, hotkey_data);
+	obs_data_array_release(hotkey_data);
+}
+
+void BetterBufferFilterRuntime::SaveTriggerHotkeyToSettings(obs_data_t *settings) const
+{
+	if (!settings || trigger_hotkey_id_ == OBS_INVALID_HOTKEY_ID)
+		return;
+
+	obs_data_array_t *hotkey_data = obs_hotkey_save(trigger_hotkey_id_);
+	if (!hotkey_data)
+		return;
+
+	obs_data_set_array(settings, "trigger_hotkey", hotkey_data);
+	obs_data_array_release(hotkey_data);
+}
+
 void BetterBufferFilterRuntime::UpdateTriggerHotkeyBinding()
 {
 	if (!source_)
@@ -511,11 +603,20 @@ bool BetterBufferFilterRuntime::TriggerReplaySave()
 		return false;
 	}
 
+	NotifyReplaySaved();
+	return true;
+}
+
+void BetterBufferFilterRuntime::NotifyReplaySaved()
+{
 	SetLastStatusMessage("Replay saved");
 	SetLastOutputPath(GetSavePath());
 	if (source_)
 		obs_source_update_properties(source_);
-	return true;
+
+#ifdef _WIN32
+	ShowCaptureSavedPopupWindows();
+#endif
 }
 
 void BetterBufferFilterRuntime::ApplyConfiguration()

@@ -24,11 +24,14 @@ Este proyecto está construido sobre el [obs-plugintemplate](https://github.com/
 
 Si vas a compilar Better Buffer desde el código fuente, revisa [`SETUP.md`](SETUP.md) para el stack de instalación y el ciclo de compilación en VS Code.
 
+Si solo quieres instalar el plugin desde el repositorio, revisa [`install.md`](install.md).
+
 Para usuarios que solo quieren instalar y usar el plugin, revisa el [Manual de Usuario de Better Buffer](MANUAL.md).
 
 ## Documentación
 
 * [Manual de Usuario de Better Buffer](MANUAL.md) — cómo instalar y usar el plugin.
+* [Guía rápida de instalación](install.md) — instalación directa para usuarios finales.
 * [Roadmap técnico](ROADMAP.md) — arquitectura y fases de desarrollo, útil si quieres contribuir.
 * [Guía de instalación del entorno de desarrollo](SETUP.md)
 
