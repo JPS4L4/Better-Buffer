@@ -53,6 +53,18 @@ void GetDefaults(obs_data_t *settings)
 	SetDefaults(settings);
 }
 
+void Activate(void *data)
+{
+	if (data)
+		Instance(data)->SetProgramActive(true);
+}
+
+void Deactivate(void *data)
+{
+	if (data)
+		Instance(data)->SetProgramActive(false);
+}
+
 void Tick(void *data, float seconds)
 {
 	if (data)
@@ -85,6 +97,11 @@ obs_properties_t *GetProperties(void *data)
 	obs_properties_t *props = obs_properties_create();
 
 	obs_properties_add_bool(props, "enabled", obs_module_text("Enabled"));
+
+	obs_property_t *mode = obs_properties_add_list(props, "mode", obs_module_text("Mode"), OBS_COMBO_TYPE_LIST,
+						       OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(mode, obs_module_text("Mode.Always"), static_cast<int>(RecordMode::Always));
+	obs_property_list_add_int(mode, obs_module_text("Mode.ProgramOnly"), static_cast<int>(RecordMode::ProgramOnly));
 
 	obs_property_t *duration = obs_properties_add_int_slider(props, "duration", obs_module_text("Duration"),
 								 kMinDurationSec, kMaxDurationSec, 1);
@@ -122,6 +139,9 @@ obs_properties_t *GetProperties(void *data)
 		obs_properties_add_text(props, "filename", obs_module_text("Filename"), OBS_TEXT_DEFAULT);
 	obs_property_set_long_description(filename, obs_module_text("Filename.Description"));
 
+	obs_property_t *bridge = obs_properties_add_bool(props, "native_bridge", obs_module_text("NativeBridge"));
+	obs_property_set_long_description(bridge, obs_module_text("NativeBridge.Description"));
+
 	AddInfoText(props, kStatusKey, obs_module_text("Status"));
 
 	if (instance) {
@@ -149,6 +169,8 @@ void RegisterFilter()
 	info.get_defaults = GetDefaults;
 	info.get_properties = GetProperties;
 	info.update = Update;
+	info.activate = Activate;
+	info.deactivate = Deactivate;
 	info.video_tick = Tick;
 	info.video_render = Render;
 	info.save = Save;

@@ -33,11 +33,13 @@ public:
 	void RenderPassthrough() const;
 
 	bool SaveClip();
+	bool NativeBridgeEnabled() const;
+	void SetProgramActive(bool active);
 	std::string StatusText() const;
 	obs_source_t *Source() const { return source_; }
 
 private:
-	enum class State { Disabled, WaitingForSource, Running, Error };
+	enum class State { Disabled, WaitingForSource, WaitingForProgram, Running, Error };
 
 	static PipelineCallbacks MakeCallbacks(FilterInstance *self);
 	static void HotkeyCallback(void *data, obs_hotkey_id id, obs_hotkey_t *hotkey, bool pressed);
@@ -76,6 +78,7 @@ private:
 	bool exiting_ = false;
 	bool reconcile_pending_ = false;
 	bool source_removed_ = false;
+	bool program_active_ = false;
 	std::string cached_name_;
 	std::string running_key_;
 	std::string failure_key_;
@@ -88,6 +91,10 @@ private:
 
 FilterInstance *CreateInstance(obs_source_t *source, obs_data_t *settings);
 void DestroyInstance(FilterInstance *instance);
+
+// Saves a clip on every running instance (only those following the native
+// Save Replay when `native_bridge_only` is set). Returns how many were saved.
+int SaveAllClips(bool native_bridge_only);
 
 // Stops every pipeline and keeps them stopped (used when OBS is closing).
 void StopAllInstances();

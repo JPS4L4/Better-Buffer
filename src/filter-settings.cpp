@@ -142,6 +142,7 @@ std::string ResolveEncoderId(const std::string &wanted)
 void SetDefaults(obs_data_t *settings)
 {
 	obs_data_set_default_bool(settings, "enabled", true);
+	obs_data_set_default_int(settings, "mode", static_cast<int>(RecordMode::Always));
 	obs_data_set_default_int(settings, "duration", kDefaultDurationSec);
 	obs_data_set_default_string(settings, "encoder", DefaultEncoderId().c_str());
 	obs_data_set_default_int(settings, "video_bitrate", kDefaultVideoBitrateKbps);
@@ -152,12 +153,16 @@ void SetDefaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, "audio_bitrate", kDefaultAudioBitrateKbps);
 	obs_data_set_default_string(settings, "directory", DefaultSaveDirectory().c_str());
 	obs_data_set_default_string(settings, "filename", kDefaultFilenameFormat);
+	obs_data_set_default_bool(settings, "native_bridge", true);
 }
 
 FilterSettings ReadSettings(obs_data_t *settings)
 {
 	FilterSettings result;
 	result.enabled = obs_data_get_bool(settings, "enabled");
+	result.mode = obs_data_get_int(settings, "mode") == static_cast<int>(RecordMode::ProgramOnly)
+			      ? RecordMode::ProgramOnly
+			      : RecordMode::Always;
 	result.duration_sec =
 		ClampInt(static_cast<int>(obs_data_get_int(settings, "duration")), kMinDurationSec, kMaxDurationSec);
 	result.encoder_id = obs_data_get_string(settings, "encoder");
@@ -186,14 +191,8 @@ FilterSettings ReadSettings(obs_data_t *settings)
 	result.filename_format = obs_data_get_string(settings, "filename");
 	if (result.filename_format.empty())
 		result.filename_format = kDefaultFilenameFormat;
+	result.native_bridge = obs_data_get_bool(settings, "native_bridge");
 	return result;
-}
-
-bool PipelineSettingsDiffer(const FilterSettings &a, const FilterSettings &b)
-{
-	return a.enabled != b.enabled || a.duration_sec != b.duration_sec || a.encoder_id != b.encoder_id ||
-	       a.video_bitrate_kbps != b.video_bitrate_kbps || a.track_mask != b.track_mask ||
-	       a.audio_bitrate_kbps != b.audio_bitrate_kbps;
 }
 
 std::string SanitizeFileName(const std::string &name)

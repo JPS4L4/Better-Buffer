@@ -1,5 +1,7 @@
 #include "buffer-pipeline.hpp"
 
+#include "filter-settings.hpp"
+
 #include <obs-module.h>
 #include <plugin-support.h>
 
@@ -10,8 +12,6 @@
 namespace bb {
 
 namespace {
-
-constexpr int kMaxTracks = 6;
 
 std::string FindAacEncoderId()
 {

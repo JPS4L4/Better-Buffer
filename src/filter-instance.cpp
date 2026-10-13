@@ -123,6 +123,24 @@ void FilterInstance::HotkeyCallback(void *data, obs_hotkey_id, obs_hotkey_t *, b
 		static_cast<FilterInstance *>(data)->SaveClip();
 }
 
+bool FilterInstance::NativeBridgeEnabled() const
+{
+	std::lock_guard<std::mutex> lock(mutex_);
+	return settings_.native_bridge;
+}
+
+void FilterInstance::SetProgramActive(bool active)
+{
+	bool schedule = false;
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		program_active_ = active;
+		schedule = settings_.mode == RecordMode::ProgramOnly;
+	}
+	if (schedule)
+		ScheduleReconcile();
+}
+
 bool FilterInstance::SaveClip()
 {
 	if (!pipeline_.Save()) {
@@ -143,12 +161,18 @@ void FilterInstance::Tick(float seconds)
 	uint32_t height = 0;
 	BufferPipeline::QuerySourceSize(parent, width, height);
 	const char *name = obs_source_get_name(parent);
+	const bool program_active = obs_source_active(parent);
 
 	bool schedule = false;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (shutdown_ || exiting_ || !settings_.enabled || source_removed_)
 			return;
+
+		if (program_active != program_active_) {
+			program_active_ = program_active;
+			schedule = settings_.mode == RecordMode::ProgramOnly;
+		}
 
 		if (name && cached_name_ != name) {
 			cached_name_ = name;
@@ -283,6 +307,12 @@ void FilterInstance::ReconcileLocked(obs_source_t *parent)
 	if (!parent) {
 		StopPipelineLocked();
 		SetState(State::WaitingForSource);
+		return;
+	}
+
+	if (settings.mode == RecordMode::ProgramOnly && !obs_source_active(parent)) {
+		StopPipelineLocked();
+		SetState(State::WaitingForProgram);
 		return;
 	}
 
@@ -432,6 +462,9 @@ std::string FilterInstance::StatusText() const
 	case State::WaitingForSource:
 		text = obs_module_text("Status.WaitingForSource");
 		break;
+	case State::WaitingForProgram:
+		text = obs_module_text("Status.WaitingForProgram");
+		break;
 	case State::Running:
 		text = obs_module_text("Status.Running");
 		text += " (" + std::to_string(pipeline_.Width()) + "x" + std::to_string(pipeline_.Height()) + ")";
@@ -477,6 +510,24 @@ void DestroyInstance(FilterInstance *instance)
 	}
 	if (owned)
 		owned->Shutdown();
+}
+
+int SaveAllClips(bool native_bridge_only)
+{
+	std::vector<std::shared_ptr<FilterInstance>> snapshot;
+	{
+		std::lock_guard<std::mutex> lock(g_registry_mutex);
+		snapshot = g_instances;
+	}
+
+	int saved = 0;
+	for (const std::shared_ptr<FilterInstance> &instance : snapshot) {
+		if (native_bridge_only && !instance->NativeBridgeEnabled())
+			continue;
+		if (instance->SaveClip())
+			++saved;
+	}
+	return saved;
 }
 
 void StopAllInstances()
