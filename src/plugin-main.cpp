@@ -1,5 +1,5 @@
 /*
-Better Buffer para OBS Studio
+Better Buffer for OBS Studio
 Copyright (C) 2026 Juan Pablo Salazar Ceballos
 
 This program is free software; you can redistribute it and/or modify

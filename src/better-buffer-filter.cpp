@@ -1,5 +1,4 @@
 #include "better-buffer-filter.hpp"
-#include "status-dock.hpp"
 
 #include <obs-module.h>
 #include <obs-frontend-api.h>
@@ -34,7 +33,7 @@
 #endif
 
 // ============================================================
-// BetterBufferFilterRuntime — guarda/lee la config de una instancia
+// BetterBufferFilterRuntime: holds and loads the configuration of one filter instance
 // ============================================================
 
 static std::string GetDefaultVideosDirectory()
@@ -48,7 +47,8 @@ static std::string GetDefaultVideosDirectory()
 		int needed = WideCharToMultiByte(CP_UTF8, 0, wide_path.c_str(), -1, nullptr, 0, nullptr, nullptr);
 		if (needed > 0) {
 			std::string narrow_path(static_cast<size_t>(needed), '\0');
-			WideCharToMultiByte(CP_UTF8, 0, wide_path.c_str(), -1, narrow_path.data(), needed, nullptr, nullptr);
+			WideCharToMultiByte(CP_UTF8, 0, wide_path.c_str(), -1, narrow_path.data(), needed, nullptr,
+					    nullptr);
 			if (!narrow_path.empty() && narrow_path.back() == '\0')
 				narrow_path.pop_back();
 			return narrow_path;
@@ -56,10 +56,8 @@ static std::string GetDefaultVideosDirectory()
 	}
 	return "C:/Users/Public/Videos";
 #elif defined(__APPLE__)
-	// TODO(Fase 2, ROADMAP.md): usar NSSearchPathForDirectoriesInDomains(NSMoviesDirectory, NSUserDomainMask, YES)
 	return "~/Movies";
 #elif defined(__linux__)
-	// TODO(Fase 2, ROADMAP.md): usar xdg-user-dir VIDEOS cuando la API de escritorio esté disponible.
 	const char *home = std::getenv("HOME");
 	if (home && home[0]) {
 		std::string candidate = std::string(home) + "/Videos";
@@ -335,7 +333,7 @@ void BetterBufferFilterRuntime::SetFilePattern(const char *pattern)
 {
 	if (!pattern)
 		return;
-	
+
 	snprintf(file_pattern_, sizeof(file_pattern_), "%s", pattern);
 }
 
@@ -364,7 +362,6 @@ void BetterBufferFilterRuntime::LoadFromSettings(obs_data_t *settings)
 
 	enabled_ = obs_data_get_bool(settings, "enabled");
 	buffer_duration_ = (int)obs_data_get_int(settings, "buffer_duration");
-	SetUseNativeReplayBridge(obs_data_get_bool(settings, "use_native_replay_bridge"));
 	audio_track_mask_ = (uint32_t)obs_data_get_int(settings, "audio_track_mask");
 	SetFilePattern(obs_data_get_string(settings, "filename_pattern"));
 	SetSavePath(obs_data_get_string(settings, "save_path"));
@@ -374,9 +371,9 @@ void BetterBufferFilterRuntime::LoadFromSettings(obs_data_t *settings)
 	LoadTriggerHotkeyFromSettings(settings);
 
 	obs_log(LOG_INFO,
-		"Better Buffer: LoadFromSettings -> enabled=%s duration=%d native_bridge=%s audio_track_mask=0x%02X encoder=%s bitrate=%dkbps file_pattern=%s save_path=%s",
-		enabled_ ? "true" : "false", buffer_duration_, GetUseNativeReplayBridge() ? "true" : "false",
-		audio_track_mask_, GetEncoderId(), GetBitrateKbps(), GetFilePattern(), GetSavePath());
+		"Better Buffer: LoadFromSettings -> enabled=%s duration=%d audio_track_mask=0x%02X encoder=%s bitrate=%dkbps file_pattern=%s save_path=%s",
+		enabled_ ? "true" : "false", buffer_duration_, audio_track_mask_, GetEncoderId(), GetBitrateKbps(),
+		GetFilePattern(), GetSavePath());
 }
 
 void BetterBufferFilterRuntime::SaveToSettings(obs_data_t *settings) const
@@ -386,7 +383,6 @@ void BetterBufferFilterRuntime::SaveToSettings(obs_data_t *settings) const
 
 	obs_data_set_bool(settings, "enabled", enabled_);
 	obs_data_set_int(settings, "buffer_duration", buffer_duration_);
-	obs_data_set_bool(settings, "use_native_replay_bridge", use_native_replay_bridge_);
 	obs_data_set_int(settings, "audio_track_mask", static_cast<long long>(audio_track_mask_));
 	SetBitrateKbpsInSettings(settings, bitrate_kbps_);
 	obs_data_set_string(settings, "filename_pattern", GetFilePattern());
@@ -395,9 +391,9 @@ void BetterBufferFilterRuntime::SaveToSettings(obs_data_t *settings) const
 	SaveTriggerHotkeyToSettings(settings);
 
 	obs_log(LOG_INFO,
-		"Better Buffer: SaveToSettings -> enabled=%s duration=%d native_bridge=%s audio_track_mask=0x%02X encoder=%s bitrate=%dkbps file_pattern=%s save_path=%s",
-		enabled_ ? "true" : "false", buffer_duration_, GetUseNativeReplayBridge() ? "true" : "false",
-		audio_track_mask_, GetEncoderId(), GetBitrateKbps(), GetFilePattern(), GetSavePath());
+		"Better Buffer: SaveToSettings -> enabled=%s duration=%d audio_track_mask=0x%02X encoder=%s bitrate=%dkbps file_pattern=%s save_path=%s",
+		enabled_ ? "true" : "false", buffer_duration_, audio_track_mask_, GetEncoderId(), GetBitrateKbps(),
+		GetFilePattern(), GetSavePath());
 }
 
 void BetterBufferFilterRuntime::SetEnabled(bool enabled)
@@ -438,16 +434,6 @@ void BetterBufferFilterRuntime::SetBitrateKbps(int bitrate_kbps)
 int BetterBufferFilterRuntime::GetBitrateKbps() const
 {
 	return bitrate_kbps_;
-}
-
-void BetterBufferFilterRuntime::SetUseNativeReplayBridge(bool enabled)
-{
-	use_native_replay_bridge_ = enabled;
-}
-
-bool BetterBufferFilterRuntime::GetUseNativeReplayBridge() const
-{
-	return use_native_replay_bridge_;
 }
 
 void BetterBufferFilterRuntime::SetActive(bool active)
@@ -495,9 +481,8 @@ obs_output_t *BetterBufferFilterRuntime::GetReplayOutput() const
 void BetterBufferFilterRuntime::LogSummary() const
 {
 	obs_log(LOG_INFO,
-		"better_buffer filter: enabled=%s duration=%ds native_bridge=%s audio_track_mask=0x%02X encoder=%s bitrate=%dkbps",
-		enabled_ ? "true" : "false", buffer_duration_, GetUseNativeReplayBridge() ? "true" : "false",
-		audio_track_mask_, GetEncoderId(), GetBitrateKbps());
+		"better_buffer filter: enabled=%s duration=%ds audio_track_mask=0x%02X encoder=%s bitrate=%dkbps",
+		enabled_ ? "true" : "false", buffer_duration_, audio_track_mask_, GetEncoderId(), GetBitrateKbps());
 }
 
 void BetterBufferFilterRuntime::SetLastStatusMessage(const char *message)
@@ -625,12 +610,6 @@ void BetterBufferFilterRuntime::ApplyConfiguration()
 	ApplyReplayBufferConfiguration();
 }
 
-bool BetterBufferFilterRuntime::IsPipelineActive() const
-{
-	std::lock_guard<std::mutex> lock(pipeline_mutex_);
-	return pipeline_active_;
-}
-
 void BetterBufferFilterRuntime::CleanupPipelineResourcesLocked()
 {
 	if (video_encoder_) {
@@ -677,28 +656,26 @@ void BetterBufferFilterRuntime::StartPipelineLocked()
 	if (pipeline_active_)
 		return;
 
-	if (!enabled_ || use_native_replay_bridge_) {
-		obs_log(LOG_INFO,
-			"Better Buffer: StartPipeline skipped because the filter is disabled or running in legacy mode.");
+	if (!enabled_) {
+		obs_log(LOG_INFO, "Better Buffer: StartPipeline skipped because the filter is disabled.");
 		return;
 	}
 
-	// Primero se valida el parent: sin fuente padre no existe objetivo para el view.
+	// Without a parent source there is nothing to capture.
 	obs_source_t *parent = GetSource() ? obs_filter_get_parent(GetSource()) : nullptr;
 	if (!parent) {
 		obs_log(LOG_WARNING, "Better Buffer: StartPipeline canceled because parent source is null.");
 		return;
 	}
 
-	// Se crea la vista aislada antes de cualquier encoder para encapsular solo esta fuente.
+	// A private view isolates this source from the rest of the scene.
 	view_ = obs_view_create();
 	if (!view_) {
 		obs_log(LOG_WARNING, "Better Buffer: failed to create obs_view_t for dedicated pipeline.");
 		return;
 	}
 
-	// El orden importa: primero se conecta la fuente al canal 0 de la vista,
-	// luego se inicializa el video de la vista con obs_view_add().
+	// Attach the source to channel 0 first, then add the view to the render loop.
 	obs_view_set_source(view_, 0, parent);
 	view_video_ = obs_view_add(view_);
 	if (!view_video_) {
@@ -707,7 +684,7 @@ void BetterBufferFilterRuntime::StartPipelineLocked()
 		return;
 	}
 
-	// El encoder de video depende de view_video_ ya inicializado y conectado.
+	// The video encoder needs the view video to exist already.
 	obs_data_t *video_settings = obs_data_create();
 	obs_data_set_int(video_settings, "bitrate", bitrate_kbps_);
 
@@ -729,7 +706,7 @@ void BetterBufferFilterRuntime::StartPipelineLocked()
 
 	obs_encoder_set_video(video_encoder_, view_video_);
 
-	// El output se crea después de encoders/settings para poder cablearlo de inmediato.
+	// The output is created after the video encoder so it can be wired right away.
 	obs_data_t *output_settings = obs_data_create();
 	obs_data_set_int(output_settings, "max_time_sec", buffer_duration_);
 	obs_data_set_int(output_settings, "max_size_mb", 0);
@@ -751,7 +728,7 @@ void BetterBufferFilterRuntime::StartPipelineLocked()
 
 	obs_output_set_video_encoder(replay_output_, video_encoder_);
 
-	// Audio se monta después del output para enlazarlo al índice de track 0 del replay.
+	// Audio is attached after the output, bound to replay track index 0.
 	const std::vector<std::string> audio_encoders = GetAvailableAudioEncoderIds();
 	const std::string audio_encoder_id = GetPreferredAudioEncoderId(audio_encoders);
 	if (audio_encoder_id.empty()) {
@@ -764,11 +741,7 @@ void BetterBufferFilterRuntime::StartPipelineLocked()
 	size_t mixer_idx = GetFirstActiveTrackIndex(audio_track_mask_);
 
 	if ((audio_track_mask_ & (audio_track_mask_ - 1u)) != 0u) {
-		// TODO(Fase 2): obs_audio_encoder_create selecciona un solo mixer_idx.
-		// No encontramos en obs.h una API directa para asignar una máscara de
-		// múltiples mixers a un solo audio encoder; para multitrack real habría
-		// que crear varios audio encoders (uno por bit activo) y mapearlos con
-		// obs_output_set_audio_encoder(output, encoder, idx).
+		// An audio encoder takes a single mixer index; multi-track needs one encoder per track.
 		obs_log(LOG_WARNING,
 			"Better Buffer: audio_track_mask has multiple tracks (0x%02X); only the first active track will be used (idx=%zu).",
 			audio_track_mask_, mixer_idx);
@@ -798,18 +771,17 @@ void BetterBufferFilterRuntime::StartPipelineLocked()
 	obs_encoder_set_audio(audio_encoder_, obs_audio);
 	obs_output_set_audio_encoder(replay_output_, audio_encoder_, 0);
 
-	// El start es el último paso: si falla, se limpia todo en orden inverso.
+	// Starting is the last step; on failure everything is released in reverse order.
 	if (!obs_output_start(replay_output_)) {
 		const char *last_error = obs_output_get_last_error(replay_output_);
 		obs_log(LOG_WARNING, "Better Buffer: failed to start dedicated replay_output. error=%s",
-			(last_error && *last_error) ? last_error : "<sin detalle>");
+			(last_error && *last_error) ? last_error : "<no details>");
 		CleanupPipelineResourcesLocked();
 		return;
 	}
 
 	pipeline_active_ = true;
 	SetLastStatusMessage("Ready");
-	BetterBufferStatusDock::SetMessage("Ready");
 	obs_log(LOG_INFO,
 		"Better Buffer: dedicated pipeline started for source '%s' (encoder=%s bitrate=%dkbps duration=%ds audio_track_mask=0x%02X selected_mixer_idx=%zu).",
 		obs_source_get_name(parent), video_encoder_id, bitrate_kbps_, buffer_duration_, audio_track_mask_,
@@ -828,18 +800,14 @@ void BetterBufferFilterRuntime::StopPipelineLocked()
 		return;
 
 	if (replay_output_) {
-		// Primer paso del teardown: detener captura antes de liberar encoders y view.
+		// First teardown step: stop capturing before releasing encoders and the view.
 		obs_output_stop(replay_output_);
-		// TODO(Fase 2): obs_output_stop no expone espera explícita por finalización
-		// en esta ruta. Si en pruebas reales hiciera falta sincronizar teardown,
-		// hay que enlazar señales de output (stopping/stop) y esperar confirmación.
 	}
 
-	// El resto se libera en inverso a la creación para evitar punteros colgantes.
+	// Release the rest in reverse creation order to avoid dangling pointers.
 	CleanupPipelineResourcesLocked();
 	pipeline_active_ = false;
 	SetLastStatusMessage("Stopped");
-	BetterBufferStatusDock::SetMessage("Stopped");
 	obs_log(LOG_INFO, "Better Buffer: dedicated pipeline stopped and released.");
 }
 
@@ -973,24 +941,14 @@ void BetterBufferFilterRuntime::ApplyReplayBufferConfiguration()
 	if (!enabled_)
 		return;
 
-	if (use_native_replay_bridge_) {
-		obs_log(LOG_INFO,
-			"Better Buffer: legacy native replay bridge enabled; dedicated pipeline remains inactive for this instance.");
-		return;
-	}
-
 	obs_log(LOG_INFO,
 		"Better Buffer: configuration loaded for dedicated pipeline (obs_frontend_get_replay_buffer_output is not used).");
 }
 
 // ============================================================
-// Puente hacia OBS: aquí es donde el filtro se vuelve "real"
+// OBS source callbacks
 // ============================================================
 
-// Aquí es donde, en la Fase 2, se debe crear (en activate) y destruir
-// (en deactivate) el obs_view_t + obs_output_t + encoders reales — así el
-// pipeline de codificación solo existe mientras la fuente está efectivamente
-// alimentando una salida en vivo, evitando consumo innecesario de CPU/GPU.
 static void better_buffer_activate(void *data)
 {
 	auto *runtime = static_cast<BetterBufferFilterRuntime *>(data);
@@ -1003,7 +961,6 @@ static void better_buffer_activate(void *data)
 		"Better Buffer: source '%s' ACTIVATED because it is present in the current scene; starting dedicated pipeline.",
 		parent_source ? obs_source_get_name(parent_source) : "<no source>");
 	runtime->SetLastStatusMessage("Waiting for output");
-	BetterBufferStatusDock::SetMessage("Waiting for output");
 	runtime->StartPipeline();
 }
 
@@ -1017,7 +974,6 @@ static void better_buffer_deactivate(void *data)
 	runtime->StopPipeline();
 	runtime->SetActive(false);
 	runtime->SetLastStatusMessage("Inactive");
-	BetterBufferStatusDock::SetMessage("Inactive");
 	obs_log(LOG_INFO,
 		"Better Buffer: source '%s' DEACTIVATED because it is no longer present in the current scene; stopping dedicated pipeline.",
 		parent_source ? obs_source_get_name(parent_source) : "<no source>");
@@ -1050,9 +1006,6 @@ static void better_buffer_save(void *data, obs_data_t *settings)
 	runtime->SaveToSettings(settings);
 }
 
-// Fase 2: aquí se va a crear el encoder real y el output cuando la fuente
-// padre esté activa/visible (obs_source_active() / obs_source_showing()),
-// de forma perezosa y no al aplicar el filtro.
 static void *better_buffer_create(obs_data_t *settings, obs_source_t *source)
 {
 	auto *runtime = new BetterBufferFilterRuntime();
@@ -1075,13 +1028,11 @@ static void *better_buffer_create(obs_data_t *settings, obs_source_t *source)
 	else
 		runtime->SetActive(false);
 
-	BetterBufferStatusDock::Init();
 	obs_frontend_add_event_callback(OnReplayBufferEvent, runtime);
 	runtime->LoadFromSettings(settings);
 	runtime->ApplyConfiguration();
 	if (obs_frontend_streaming_active() || obs_frontend_recording_active()) {
 		runtime->SetLastStatusMessage("Output active");
-		BetterBufferStatusDock::SetMessage("Output active");
 		runtime->StartPipeline();
 	}
 	return runtime;
@@ -1102,7 +1053,6 @@ static void better_buffer_destroy(void *data)
 		runtime->StopPipeline();
 
 	obs_frontend_remove_event_callback(OnReplayBufferEvent, runtime);
-	BetterBufferStatusDock::Shutdown();
 	delete runtime;
 }
 
@@ -1111,7 +1061,6 @@ static void better_buffer_defaults(obs_data_t *settings)
 	std::string default_path = GetDefaultVideosDirectory();
 	obs_data_set_default_bool(settings, "enabled", true);
 	obs_data_set_default_int(settings, "buffer_duration", 10);
-	obs_data_set_default_bool(settings, "use_native_replay_bridge", false);
 	obs_data_set_default_int(settings, "audio_track_mask", 1); // Track 1
 	obs_data_set_default_string(settings, "bitrate_kbps", "6000");
 	obs_data_set_default_string(settings, "filename_pattern", "%SOURCE%_%CCYY-%MM-%DD_%hh-%mm-%ss");
@@ -1124,21 +1073,6 @@ static void better_buffer_defaults(obs_data_t *settings)
 static obs_properties_t *better_buffer_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
-	obs_property_t *native_bridge_toggle = obs_properties_add_bool(props, "use_native_replay_bridge",
-								       "Use OBS native replay buffer (legacy mode)");
-	obs_property_set_long_description(
-		native_bridge_toggle,
-		"Disabled (recommended): prevents this instance from overwriting OBS global Replay Buffer settings. Enabled: applies path/name to OBS native replay buffer for temporary compatibility.");
-
-	obs_property_t *pipeline_status =
-		obs_properties_add_text(props, "pipeline_mode_status", "Pipeline mode", OBS_TEXT_INFO);
-	obs_property_set_enabled(pipeline_status, false);
-	obs_property_text_set_info_type(pipeline_status, OBS_TEXT_INFO_NORMAL);
-	obs_property_text_set_info_word_wrap(pipeline_status, true);
-	obs_property_set_long_description(
-		pipeline_status,
-		"Recommended setup: keep legacy mode off for a dedicated, per-source replay pipeline. This avoids sharing OBS global replay state and keeps each instance isolated.");
-
 	obs_property_t *buffer_duration =
 		obs_properties_add_int_slider(props, "buffer_duration", "Clip duration (seconds)", 5, 300, 5);
 	obs_property_set_long_description(
@@ -1175,7 +1109,7 @@ static obs_properties_t *better_buffer_properties(void *data)
 	obs_property_text_set_info_word_wrap(encoder_bitrate_help, true);
 	obs_property_set_long_description(
 		encoder_bitrate_help,
-		"These controls are saved per filter instance and are ready for per-source dedicated pipelines. If legacy mode is enabled, OBS still uses its global replay buffer for saving.");
+		"These controls are saved per filter instance and are ready for per-source dedicated pipelines.");
 	obs_source_t *filter_source = runtime ? runtime->GetSource() : nullptr;
 	obs_source_t *parent_source = filter_source ? obs_filter_get_parent(filter_source) : nullptr;
 
@@ -1272,9 +1206,8 @@ static obs_properties_t *better_buffer_properties(void *data)
 	return props;
 }
 
-// Filtro de video "passthrough": no modifica la imagen, solo observa.
-// Obligatorio si output_flags incluye OBS_SOURCE_VIDEO, o la fuente se
-// verá en negro mientras el filtro esté activo.
+// Passthrough video filter: the image is not modified. Required when output_flags
+// includes OBS_SOURCE_VIDEO, otherwise the source renders black while the filter is on.
 static void better_buffer_video_render(void *data, gs_effect_t *)
 {
 	auto *runtime = static_cast<BetterBufferFilterRuntime *>(data);

@@ -7,17 +7,7 @@
 #include <mutex>
 #include <string>
 
-/*
-Estado de configuracion de una instancia del filtro Better Buffer.
-Un objeto de esta clase vive por cada fuente donde el usuario aplique
-el filtro (una para camara, otra para pantalla, etc. si aplica varias).
-
-Campos alineados al ROADMAP.md actual:
-- Fase 0: enabled_, buffer_duration_, source_ (necesario para passthrough).
-- Fase 1: audio_track_mask_ (mascara de bits real de OBS, 1 bit por track).
-No incluye seleccion de multiples fuentes ni "target" propio: el target
-es implicito, es la fuente padre del filtro (obs_filter_get_parent()).
-*/
+// Configuration and pipeline state of one Better Buffer filter instance.
 
 class BetterBufferFilterRuntime {
 public:
@@ -45,19 +35,14 @@ public:
 	void SetBitrateKbps(int bitrate_kbps);
 	int GetBitrateKbps() const;
 
-	void SetUseNativeReplayBridge(bool enabled);
-	bool GetUseNativeReplayBridge() const;
-
 	void SetActive(bool active);
 	bool IsActive() const;
 
-	// Mascara de bits real de OBS: bit 0 = Track 1, bit 1 = Track 2, etc.
-	// Se obtiene de obs_source_get_audio_mixers() sobre la fuente padre.
+	// OBS track bit mask: bit 0 = Track 1, bit 1 = Track 2, and so on.
 	void SetAudioTrackMask(uint32_t mask);
 	uint32_t GetAudioTrackMask() const;
 
-	// Puntero a la fuente (el filtro en si, no el padre) — necesario para
-	// obs_source_skip_video_filter() en el passthrough de video.
+	// The filter source itself (not the parent), needed by obs_source_skip_video_filter().
 	void SetSource(obs_source_t *source);
 	obs_source_t *GetSource() const;
 	obs_output_t *GetReplayOutput() const;
@@ -67,7 +52,6 @@ public:
 	void StartPipeline();
 	void StopPipeline();
 	void RestartPipeline();
-	bool IsPipelineActive() const;
 	void SetLastStatusMessage(const char *message);
 	const char *GetLastStatusMessage() const;
 	void SetLastOutputPath(const char *path);
@@ -92,8 +76,7 @@ private:
 	bool enabled_ = true;
 	int buffer_duration_ = 10;
 	int bitrate_kbps_ = 6000;
-	bool use_native_replay_bridge_ = false;
-	uint32_t audio_track_mask_ = 1; // por defecto, Track 1
+	uint32_t audio_track_mask_ = 1; // Track 1 by default
 	obs_source_t *source_ = nullptr;
 	char file_pattern_[256] = "%SOURCE%_%CCYY-%MM-%DD_%hh-%mm-%ss";
 	char save_path_[1024] = "";
@@ -111,8 +94,7 @@ private:
 	mutable std::mutex pipeline_mutex_;
 };
 
-// Struct que OBS usa para reconocer el filtro. Se registra una sola vez
-// en obs_module_load() vía obs_register_source(&better_buffer_filter_info).
+// Registered once from obs_module_load() with obs_register_source().
 extern "C" {
 extern struct obs_source_info better_buffer_filter_info;
 }
