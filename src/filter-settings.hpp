@@ -26,12 +26,17 @@ struct VideoEncoderInfo {
 
 enum class RecordMode { Always = 0, ProgramOnly = 1 };
 
+// SceneSource: a private audio output with the source's own sound.
+// MixerTracks: the tracks OBS mixes globally.
+enum class AudioMode { SceneSource = 0, MixerTracks = 1 };
+
 struct FilterSettings {
 	bool enabled = true;
 	RecordMode mode = RecordMode::Always;
 	int duration_sec = kDefaultDurationSec;
 	std::string encoder_id;
 	int video_bitrate_kbps = kDefaultVideoBitrateKbps;
+	AudioMode audio_mode = AudioMode::SceneSource;
 	uint32_t track_mask = 1;
 	int audio_bitrate_kbps = kDefaultAudioBitrateKbps;
 	std::string directory;

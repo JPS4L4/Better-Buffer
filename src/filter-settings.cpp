@@ -146,6 +146,7 @@ void SetDefaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, "duration", kDefaultDurationSec);
 	obs_data_set_default_string(settings, "encoder", DefaultEncoderId().c_str());
 	obs_data_set_default_int(settings, "video_bitrate", kDefaultVideoBitrateKbps);
+	obs_data_set_default_int(settings, "audio_mode", static_cast<int>(AudioMode::SceneSource));
 	for (int track = 0; track < kMaxTracks; ++track) {
 		const std::string key = "track" + std::to_string(track + 1);
 		obs_data_set_default_bool(settings, key.c_str(), track == 0);
@@ -168,6 +169,10 @@ FilterSettings ReadSettings(obs_data_t *settings)
 	result.encoder_id = obs_data_get_string(settings, "encoder");
 	result.video_bitrate_kbps = ClampInt(static_cast<int>(obs_data_get_int(settings, "video_bitrate")),
 					     kMinVideoBitrateKbps, kMaxVideoBitrateKbps);
+
+	result.audio_mode = obs_data_get_int(settings, "audio_mode") == static_cast<int>(AudioMode::MixerTracks)
+				    ? AudioMode::MixerTracks
+				    : AudioMode::SceneSource;
 
 	result.track_mask = 0;
 	for (int track = 0; track < kMaxTracks; ++track) {

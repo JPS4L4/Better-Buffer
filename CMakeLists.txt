@@ -46,6 +46,8 @@ target_sources(
     src/filter-instance.hpp
     src/filter-settings.cpp
     src/filter-settings.hpp
+    src/scene-audio.cpp
+    src/scene-audio.hpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

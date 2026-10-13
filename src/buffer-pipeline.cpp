@@ -1,6 +1,6 @@
 #include "buffer-pipeline.hpp"
 
-#include "filter-settings.hpp"
+#include "scene-audio.hpp"
 
 #include <obs-module.h>
 #include <plugin-support.h>
@@ -153,16 +153,37 @@ StartResult BufferPipeline::Start(obs_source_t *source, const PipelineConfig &co
 	obs_encoder_set_video(res.video_encoder, video);
 
 	const std::string aac_id = FindAacEncoderId();
-	audio_t *audio = obs_get_audio();
-	if (aac_id.empty() || !audio) {
+	if (aac_id.empty()) {
 		result.error = "No AAC audio encoder is available";
 		Teardown(res);
 		return result;
 	}
-	for (int track = 0; track < kMaxTracks; ++track) {
-		if ((config.track_mask & (1u << track)) == 0)
-			continue;
 
+	// The private audio output must exist before the encoder that reads it.
+	audio_t *audio = nullptr;
+	std::vector<int> tracks;
+	if (config.audio_mode == AudioMode::SceneSource) {
+		res.scene_audio = new SceneAudio();
+		if (!res.scene_audio->Open(source, name_suffix)) {
+			result.error = "Could not create the audio output for the source";
+			Teardown(res);
+			return result;
+		}
+		audio = res.scene_audio->Audio();
+		tracks.push_back(0);
+	} else {
+		audio = obs_get_audio();
+		for (int track = 0; track < kMaxTracks; ++track) {
+			if ((config.track_mask & (1u << track)) != 0)
+				tracks.push_back(track);
+		}
+	}
+	if (!audio) {
+		result.error = "Audio is not initialized";
+		Teardown(res);
+		return result;
+	}
+	for (int track : tracks) {
 		obs_data_t *audio_settings = obs_data_create();
 		obs_data_set_string(audio_settings, "rate_control", "CBR");
 		obs_data_set_int(audio_settings, "bitrate", config.audio_bitrate_kbps);
@@ -220,9 +241,10 @@ StartResult BufferPipeline::Start(obs_source_t *source, const PipelineConfig &co
 		applied_format_ = config.format;
 	}
 
-	obs_log(LOG_INFO, "Recording '%s' at %ux%u (encoder %s, %d kbps, %d s, %zu audio track(s))",
+	obs_log(LOG_INFO, "Recording '%s' at %ux%u (encoder %s, %d kbps, %d s, %s audio, %zu track(s))",
 		config.source_name.c_str(), width, height, config.encoder_id.c_str(), config.video_bitrate_kbps,
-		config.duration_sec, res.audio_encoders.size());
+		config.duration_sec, config.audio_mode == AudioMode::SceneSource ? "source" : "mixer",
+		res.audio_encoders.size());
 
 	result.code = StartResult::Code::Started;
 	return result;
@@ -250,6 +272,13 @@ void BufferPipeline::Teardown(Resources &res)
 	for (obs_encoder_t *encoder : res.audio_encoders)
 		obs_encoder_release(encoder);
 	res.audio_encoders.clear();
+
+	// Only after the encoders are gone: closing joins the audio thread they read from.
+	if (res.scene_audio) {
+		res.scene_audio->Close();
+		delete res.scene_audio;
+		res.scene_audio = nullptr;
+	}
 
 	if (res.video_encoder) {
 		obs_encoder_release(res.video_encoder);

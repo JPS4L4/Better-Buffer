@@ -17,9 +17,12 @@ std::vector<std::shared_ptr<FilterInstance>> g_instances;
 
 std::string PipelineKey(const PipelineConfig &config, uint32_t width, uint32_t height)
 {
+	// The track selection only matters when the OBS mixer tracks are recorded.
+	const uint32_t track_mask = config.audio_mode == AudioMode::MixerTracks ? config.track_mask : 0;
 	return config.encoder_id + '|' + std::to_string(config.video_bitrate_kbps) + '|' +
 	       std::to_string(config.audio_bitrate_kbps) + '|' + std::to_string(config.duration_sec) + '|' +
-	       std::to_string(config.track_mask) + '|' + std::to_string(width) + 'x' + std::to_string(height);
+	       std::to_string(static_cast<int>(config.audio_mode)) + '|' + std::to_string(track_mask) + '|' +
+	       std::to_string(width) + 'x' + std::to_string(height);
 }
 
 } // namespace
@@ -323,6 +326,7 @@ void FilterInstance::ReconcileLocked(obs_source_t *parent)
 	config.video_bitrate_kbps = settings.video_bitrate_kbps;
 	config.audio_bitrate_kbps = settings.audio_bitrate_kbps;
 	config.duration_sec = settings.duration_sec;
+	config.audio_mode = settings.audio_mode;
 	config.track_mask = settings.track_mask;
 	config.directory = settings.directory;
 	config.format = ExpandFilenameFormat(settings.filename_format, config.source_name);

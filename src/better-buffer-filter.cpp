@@ -91,6 +91,16 @@ void AddInfoText(obs_properties_t *props, const char *name, const char *title)
 	obs_property_text_set_info_word_wrap(info, true);
 }
 
+bool OnAudioModeChanged(obs_properties_t *props, obs_property_t *, obs_data_t *settings)
+{
+	obs_property_t *tracks = obs_properties_get(props, "tracks");
+	const bool visible = obs_data_get_int(settings, "audio_mode") == static_cast<int>(AudioMode::MixerTracks);
+	if (!tracks || obs_property_visible(tracks) == visible)
+		return false;
+	obs_property_set_visible(tracks, visible);
+	return true;
+}
+
 obs_properties_t *GetProperties(void *data)
 {
 	auto *instance = Instance(data);
@@ -117,6 +127,15 @@ obs_properties_t *GetProperties(void *data)
 							 kMinVideoBitrateKbps, kMaxVideoBitrateKbps, 100);
 	obs_property_int_set_suffix(bitrate, " kbps");
 
+	obs_property_t *audio_mode = obs_properties_add_list(props, "audio_mode", obs_module_text("AudioMode"),
+							     OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(audio_mode, obs_module_text("AudioMode.Source"),
+				  static_cast<int>(AudioMode::SceneSource));
+	obs_property_list_add_int(audio_mode, obs_module_text("AudioMode.Tracks"),
+				  static_cast<int>(AudioMode::MixerTracks));
+	obs_property_set_long_description(audio_mode, obs_module_text("AudioMode.Description"));
+	obs_property_set_modified_callback(audio_mode, OnAudioModeChanged);
+
 	obs_properties_t *tracks = obs_properties_create();
 	AddInfoText(tracks, kTracksNoteKey, obs_module_text("Tracks.NoteTitle"));
 	for (int track = 0; track < kMaxTracks; ++track) {
@@ -124,7 +143,9 @@ obs_properties_t *GetProperties(void *data)
 		const std::string label = std::string(obs_module_text("Track")) + " " + std::to_string(track + 1);
 		obs_properties_add_bool(tracks, key.c_str(), label.c_str());
 	}
-	obs_properties_add_group(props, "tracks", obs_module_text("Tracks"), OBS_GROUP_NORMAL, tracks);
+	obs_property_t *tracks_group =
+		obs_properties_add_group(props, "tracks", obs_module_text("Tracks"), OBS_GROUP_NORMAL, tracks);
+	obs_property_set_visible(tracks_group, false);
 
 	obs_property_t *audio_bitrate = obs_properties_add_list(props, "audio_bitrate", obs_module_text("AudioBitrate"),
 								OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
@@ -147,6 +168,8 @@ obs_properties_t *GetProperties(void *data)
 	if (instance) {
 		obs_data_t *settings = obs_source_get_settings(instance->Source());
 		if (settings) {
+			obs_property_set_visible(tracks_group, obs_data_get_int(settings, "audio_mode") ==
+								       static_cast<int>(AudioMode::MixerTracks));
 			obs_data_set_string(settings, kTracksNoteKey, obs_module_text("Tracks.Note"));
 			obs_data_set_string(settings, kStatusKey, instance->StatusText().c_str());
 			obs_data_release(settings);

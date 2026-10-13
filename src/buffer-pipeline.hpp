@@ -1,5 +1,7 @@
 #pragma once
 
+#include "filter-settings.hpp"
+
 #include <obs.h>
 
 #include <atomic>
@@ -11,12 +13,15 @@
 
 namespace bb {
 
+class SceneAudio;
+
 struct PipelineConfig {
 	std::string source_name;
 	std::string encoder_id;
 	int video_bitrate_kbps = 12000;
 	int audio_bitrate_kbps = 192;
 	int duration_sec = 30;
+	AudioMode audio_mode = AudioMode::SceneSource;
 	uint32_t track_mask = 1;
 	std::string directory;
 	std::string format;
@@ -66,6 +71,7 @@ private:
 		obs_source_t *source = nullptr;
 		obs_view_t *view = nullptr;
 		obs_encoder_t *video_encoder = nullptr;
+		SceneAudio *scene_audio = nullptr;
 		std::vector<obs_encoder_t *> audio_encoders;
 		obs_output_t *output = nullptr;
 	};
