@@ -33,7 +33,7 @@
     },
     "platformConfig": {
         "macos": {
-            "bundleId": "com.tuusuario.better-buffer"
+            "bundleId": "com.jps4l4.better-buffer"
         }
     },
     "name": "better-buffer",
