@@ -1,5 +1,6 @@
 #include "better-buffer-filter.hpp"
 
+#include "audio-routing.hpp"
 #include "filter-instance.hpp"
 #include "filter-settings.hpp"
 
@@ -14,7 +15,10 @@ namespace bb {
 namespace {
 
 const char *const kStatusKey = "status_text";
-const char *const kTracksNoteKey = "tracks_note";
+const char *const kHotkeyNoteKey = "hotkey_note";
+const char *const kCameraNoteKey = "camera_note";
+const char *const kAudioSourcesKey = "audio_sources";
+const char *const kAdvancedKey = "advanced";
 
 FilterInstance *Instance(void *data)
 {
@@ -81,7 +85,8 @@ void Render(void *data, gs_effect_t *)
 void Save(void *, obs_data_t *settings)
 {
 	obs_data_unset_user_value(settings, kStatusKey);
-	obs_data_unset_user_value(settings, kTracksNoteKey);
+	obs_data_unset_user_value(settings, kHotkeyNoteKey);
+	obs_data_unset_user_value(settings, kCameraNoteKey);
 }
 
 void AddInfoText(obs_properties_t *props, const char *name, const char *title)
@@ -91,13 +96,23 @@ void AddInfoText(obs_properties_t *props, const char *name, const char *title)
 	obs_property_text_set_info_word_wrap(info, true);
 }
 
-bool OnAudioModeChanged(obs_properties_t *props, obs_property_t *, obs_data_t *settings)
+void SetVisible(obs_properties_t *props, const char *name, bool visible)
 {
-	obs_property_t *tracks = obs_properties_get(props, "tracks");
-	const bool visible = obs_data_get_int(settings, "audio_mode") == static_cast<int>(AudioMode::MixerTracks);
-	if (!tracks || obs_property_visible(tracks) == visible)
-		return false;
-	obs_property_set_visible(tracks, visible);
+	obs_property_t *property = obs_properties_get(props, name);
+	if (property)
+		obs_property_set_visible(property, visible);
+}
+
+bool OnAudioScopeChanged(obs_properties_t *props, obs_property_t *, obs_data_t *settings)
+{
+	SetVisible(props, kAudioSourcesKey,
+		   obs_data_get_int(settings, "audio_scope") == static_cast<int>(AudioScope::SelectedSources));
+	return true;
+}
+
+bool OnShowAdvancedChanged(obs_properties_t *props, obs_property_t *, obs_data_t *settings)
+{
+	SetVisible(props, kAdvancedKey, obs_data_get_bool(settings, "show_advanced"));
 	return true;
 }
 
@@ -108,69 +123,90 @@ obs_properties_t *GetProperties(void *data)
 
 	obs_properties_add_bool(props, "enabled", obs_module_text("Enabled"));
 
-	obs_property_t *mode = obs_properties_add_list(props, "mode", obs_module_text("Mode"), OBS_COMBO_TYPE_LIST,
-						       OBS_COMBO_FORMAT_INT);
-	obs_property_list_add_int(mode, obs_module_text("Mode.Always"), static_cast<int>(RecordMode::Always));
-	obs_property_list_add_int(mode, obs_module_text("Mode.ProgramOnly"), static_cast<int>(RecordMode::ProgramOnly));
-
 	obs_property_t *duration = obs_properties_add_int_slider(props, "duration", obs_module_text("Duration"),
 								 kMinDurationSec, kMaxDurationSec, 1);
 	obs_property_int_set_suffix(duration, " s");
 	obs_property_set_long_description(duration, obs_module_text("Duration.Description"));
 
-	obs_property_t *encoder = obs_properties_add_list(props, "encoder", obs_module_text("Encoder"),
+	obs_property_t *scope = obs_properties_add_list(props, "audio_scope", obs_module_text("ClipAudio"),
+							OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(scope, obs_module_text("ClipAudio.All"), static_cast<int>(AudioScope::AllAudio));
+	obs_property_list_add_int(scope, obs_module_text("ClipAudio.Selected"),
+				  static_cast<int>(AudioScope::SelectedSources));
+	obs_property_set_long_description(scope, obs_module_text("ClipAudio.Description"));
+	obs_property_set_modified_callback(scope, OnAudioScopeChanged);
+
+	obs_properties_t *sources = obs_properties_create();
+	for (const AudioSourceInfo &info : ListAudioSources()) {
+		const std::string key = kAudioSourceKeyPrefix + info.uuid;
+		obs_properties_add_bool(sources, key.c_str(), info.name.c_str());
+	}
+	obs_property_t *sources_group = obs_properties_add_group(
+		props, kAudioSourcesKey, obs_module_text("AudioSources"), OBS_GROUP_NORMAL, sources);
+	obs_property_set_visible(sources_group, false);
+
+	AddInfoText(props, kHotkeyNoteKey, obs_module_text("Hint.Hotkey"));
+	AddInfoText(props, kCameraNoteKey, obs_module_text("Hint.NoCamera"));
+
+	obs_property_t *show_advanced =
+		obs_properties_add_bool(props, "show_advanced", obs_module_text("ShowAdvanced"));
+	obs_property_set_modified_callback(show_advanced, OnShowAdvancedChanged);
+
+	obs_properties_t *advanced = obs_properties_create();
+
+	obs_property_t *mode = obs_properties_add_list(advanced, "mode", obs_module_text("Mode"), OBS_COMBO_TYPE_LIST,
+						       OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(mode, obs_module_text("Mode.Always"), static_cast<int>(RecordMode::Always));
+	obs_property_list_add_int(mode, obs_module_text("Mode.ProgramOnly"), static_cast<int>(RecordMode::ProgramOnly));
+
+	obs_property_t *encoder = obs_properties_add_list(advanced, "encoder", obs_module_text("Encoder"),
 							  OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 	for (const VideoEncoderInfo &info : ListVideoEncoders())
 		obs_property_list_add_string(encoder, info.name.c_str(), info.id.c_str());
 
-	obs_property_t *bitrate = obs_properties_add_int(props, "video_bitrate", obs_module_text("VideoBitrate"),
+	obs_property_t *bitrate = obs_properties_add_int(advanced, "video_bitrate", obs_module_text("VideoBitrate"),
 							 kMinVideoBitrateKbps, kMaxVideoBitrateKbps, 100);
 	obs_property_int_set_suffix(bitrate, " kbps");
 
-	obs_property_t *audio_mode = obs_properties_add_list(props, "audio_mode", obs_module_text("AudioMode"),
-							     OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
-	obs_property_list_add_int(audio_mode, obs_module_text("AudioMode.Source"),
-				  static_cast<int>(AudioMode::SceneSource));
-	obs_property_list_add_int(audio_mode, obs_module_text("AudioMode.Tracks"),
-				  static_cast<int>(AudioMode::MixerTracks));
-	obs_property_set_long_description(audio_mode, obs_module_text("AudioMode.Description"));
-	obs_property_set_modified_callback(audio_mode, OnAudioModeChanged);
-
-	obs_properties_t *tracks = obs_properties_create();
-	AddInfoText(tracks, kTracksNoteKey, obs_module_text("Tracks.NoteTitle"));
-	for (int track = 0; track < kMaxTracks; ++track) {
-		const std::string key = "track" + std::to_string(track + 1);
-		const std::string label = std::string(obs_module_text("Track")) + " " + std::to_string(track + 1);
-		obs_properties_add_bool(tracks, key.c_str(), label.c_str());
-	}
-	obs_property_t *tracks_group =
-		obs_properties_add_group(props, "tracks", obs_module_text("Tracks"), OBS_GROUP_NORMAL, tracks);
-	obs_property_set_visible(tracks_group, false);
-
-	obs_property_t *audio_bitrate = obs_properties_add_list(props, "audio_bitrate", obs_module_text("AudioBitrate"),
-								OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_t *audio_bitrate = obs_properties_add_list(
+		advanced, "audio_bitrate", obs_module_text("AudioBitrate"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 	for (int rate : kAudioBitrates) {
 		const std::string label = std::to_string(rate) + " kbps";
 		obs_property_list_add_int(audio_bitrate, label.c_str(), rate);
 	}
 
-	obs_properties_add_path(props, "directory", obs_module_text("Directory"), OBS_PATH_DIRECTORY, nullptr, nullptr);
+	obs_properties_add_path(advanced, "directory", obs_module_text("Directory"), OBS_PATH_DIRECTORY, nullptr,
+				nullptr);
 
 	obs_property_t *filename =
-		obs_properties_add_text(props, "filename", obs_module_text("Filename"), OBS_TEXT_DEFAULT);
+		obs_properties_add_text(advanced, "filename", obs_module_text("Filename"), OBS_TEXT_DEFAULT);
 	obs_property_set_long_description(filename, obs_module_text("Filename.Description"));
 
-	obs_property_t *bridge = obs_properties_add_bool(props, "native_bridge", obs_module_text("NativeBridge"));
+	obs_property_t *track = obs_properties_add_list(advanced, "reserved_track", obs_module_text("ReservedTrack"),
+							OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	for (int number = 1; number <= kMaxTracks; ++number) {
+		const std::string label = std::string(obs_module_text("Track")) + " " + std::to_string(number);
+		obs_property_list_add_int(track, label.c_str(), number);
+	}
+	obs_property_set_long_description(track, obs_module_text("ReservedTrack.Description"));
+
+	obs_property_t *bridge = obs_properties_add_bool(advanced, "native_bridge", obs_module_text("NativeBridge"));
 	obs_property_set_long_description(bridge, obs_module_text("NativeBridge.Description"));
+
+	obs_property_t *advanced_group =
+		obs_properties_add_group(props, kAdvancedKey, obs_module_text("Advanced"), OBS_GROUP_NORMAL, advanced);
+	obs_property_set_visible(advanced_group, false);
 
 	AddInfoText(props, kStatusKey, obs_module_text("Status"));
 
 	if (instance) {
 		obs_data_t *settings = obs_source_get_settings(instance->Source());
 		if (settings) {
-			obs_property_set_visible(tracks_group, obs_data_get_int(settings, "audio_mode") ==
-								       static_cast<int>(AudioMode::MixerTracks));
-			obs_data_set_string(settings, kTracksNoteKey, obs_module_text("Tracks.Note"));
+			obs_property_set_visible(sources_group, obs_data_get_int(settings, "audio_scope") ==
+									static_cast<int>(AudioScope::SelectedSources));
+			obs_property_set_visible(advanced_group, obs_data_get_bool(settings, "show_advanced"));
+			obs_data_set_string(settings, kHotkeyNoteKey, obs_module_text("Hint.Hotkey"));
+			obs_data_set_string(settings, kCameraNoteKey, obs_module_text("Hint.NoCamera"));
 			obs_data_set_string(settings, kStatusKey, instance->StatusText().c_str());
 			obs_data_release(settings);
 		}

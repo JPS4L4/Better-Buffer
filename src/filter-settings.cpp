@@ -22,6 +22,7 @@
 namespace bb {
 
 const int kAudioBitrates[5] = {128, 160, 192, 256, 320};
+const char *const kAudioSourceKeyPrefix = "asrc_";
 
 namespace {
 
@@ -146,11 +147,9 @@ void SetDefaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, "duration", kDefaultDurationSec);
 	obs_data_set_default_string(settings, "encoder", DefaultEncoderId().c_str());
 	obs_data_set_default_int(settings, "video_bitrate", kDefaultVideoBitrateKbps);
-	obs_data_set_default_int(settings, "audio_mode", static_cast<int>(AudioMode::SceneSource));
-	for (int track = 0; track < kMaxTracks; ++track) {
-		const std::string key = "track" + std::to_string(track + 1);
-		obs_data_set_default_bool(settings, key.c_str(), track == 0);
-	}
+	obs_data_set_default_int(settings, "audio_scope", static_cast<int>(AudioScope::AllAudio));
+	obs_data_set_default_int(settings, "reserved_track", kDefaultReservedTrack);
+	obs_data_set_default_bool(settings, "show_advanced", false);
 	obs_data_set_default_int(settings, "audio_bitrate", kDefaultAudioBitrateKbps);
 	obs_data_set_default_string(settings, "directory", DefaultSaveDirectory().c_str());
 	obs_data_set_default_string(settings, "filename", kDefaultFilenameFormat);
@@ -170,18 +169,20 @@ FilterSettings ReadSettings(obs_data_t *settings)
 	result.video_bitrate_kbps = ClampInt(static_cast<int>(obs_data_get_int(settings, "video_bitrate")),
 					     kMinVideoBitrateKbps, kMaxVideoBitrateKbps);
 
-	result.audio_mode = obs_data_get_int(settings, "audio_mode") == static_cast<int>(AudioMode::MixerTracks)
-				    ? AudioMode::MixerTracks
-				    : AudioMode::SceneSource;
+	result.audio_scope = obs_data_get_int(settings, "audio_scope") == static_cast<int>(AudioScope::SelectedSources)
+				     ? AudioScope::SelectedSources
+				     : AudioScope::AllAudio;
+	result.reserved_track = ClampInt(static_cast<int>(obs_data_get_int(settings, "reserved_track")), 1, kMaxTracks);
 
-	result.track_mask = 0;
-	for (int track = 0; track < kMaxTracks; ++track) {
-		const std::string key = "track" + std::to_string(track + 1);
-		if (obs_data_get_bool(settings, key.c_str()))
-			result.track_mask |= 1u << track;
+	// One boolean per ticked source, keyed by its UUID (the source may not exist yet while loading).
+	const size_t prefix_length = std::strlen(kAudioSourceKeyPrefix);
+	for (obs_data_item_t *item = obs_data_first(settings); item; obs_data_item_next(&item)) {
+		const char *name = obs_data_item_get_name(item);
+		if (name && std::strncmp(name, kAudioSourceKeyPrefix, prefix_length) == 0 &&
+		    obs_data_item_gettype(item) == OBS_DATA_BOOLEAN && obs_data_item_has_user_value(item) &&
+		    obs_data_item_get_bool(item))
+			result.audio_sources.insert(name + prefix_length);
 	}
-	if (result.track_mask == 0)
-		result.track_mask = 1;
 
 	result.audio_bitrate_kbps = kDefaultAudioBitrateKbps;
 	const int audio_bitrate = static_cast<int>(obs_data_get_int(settings, "audio_bitrate"));
@@ -198,6 +199,11 @@ FilterSettings ReadSettings(obs_data_t *settings)
 		result.filename_format = kDefaultFilenameFormat;
 	result.native_bridge = obs_data_get_bool(settings, "native_bridge");
 	return result;
+}
+
+int AudioTrackIndex(const FilterSettings &settings)
+{
+	return settings.audio_scope == AudioScope::SelectedSources ? settings.reserved_track - 1 : 0;
 }
 
 std::string SanitizeFileName(const std::string &name)

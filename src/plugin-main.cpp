@@ -13,6 +13,7 @@ the Free Software Foundation; either version 2 of the License, or
 #include <obs-hotkey.h>
 #include <plugin-support.h>
 
+#include "audio-routing.hpp"
 #include "better-buffer-filter.hpp"
 #include "filter-instance.hpp"
 
@@ -60,6 +61,11 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 			obs_log(LOG_INFO, "Native Save Replay: saving %d clip(s)", saved);
 		break;
 	}
+	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
+	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
+		// Sources of a loaded collection get their saved mixers late; route the ticked ones again.
+		bb::RefreshAudioRouting();
+		break;
 	case OBS_FRONTEND_EVENT_EXIT:
 	case OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN:
 		// Release every encoder and output while OBS is still fully alive.
@@ -73,6 +79,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 bool obs_module_load(void)
 {
 	bb::RegisterFilter();
+	bb::StartAudioRouting();
 
 	save_all_hotkey = obs_hotkey_register_frontend("BetterBuffer.SaveAll", obs_module_text("Hotkey.SaveAll"),
 						       on_save_all_hotkey, nullptr);
@@ -93,5 +100,6 @@ void obs_module_unload(void)
 	}
 
 	bb::StopAllInstances();
+	bb::StopAudioRouting();
 	obs_log(LOG_INFO, "Better Buffer unloaded");
 }

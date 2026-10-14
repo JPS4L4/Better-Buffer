@@ -1,7 +1,5 @@
 #include "buffer-pipeline.hpp"
 
-#include "scene-audio.hpp"
-
 #include <obs-module.h>
 #include <plugin-support.h>
 
@@ -159,46 +157,26 @@ StartResult BufferPipeline::Start(obs_source_t *source, const PipelineConfig &co
 		return result;
 	}
 
-	// The private audio output must exist before the encoder that reads it.
-	audio_t *audio = nullptr;
-	std::vector<int> tracks;
-	if (config.audio_mode == AudioMode::SceneSource) {
-		res.scene_audio = new SceneAudio();
-		if (!res.scene_audio->Open(source, name_suffix)) {
-			result.error = "Could not create the audio output for the source";
-			Teardown(res);
-			return result;
-		}
-		audio = res.scene_audio->Audio();
-		tracks.push_back(0);
-	} else {
-		audio = obs_get_audio();
-		for (int track = 0; track < kMaxTracks; ++track) {
-			if ((config.track_mask & (1u << track)) != 0)
-				tracks.push_back(track);
-		}
-	}
+	// Same source the native replay buffer uses: the audio OBS mixes for one track.
+	audio_t *audio = obs_get_audio();
 	if (!audio) {
 		result.error = "Audio is not initialized";
 		Teardown(res);
 		return result;
 	}
-	for (int track : tracks) {
-		obs_data_t *audio_settings = obs_data_create();
-		obs_data_set_string(audio_settings, "rate_control", "CBR");
-		obs_data_set_int(audio_settings, "bitrate", config.audio_bitrate_kbps);
-		const std::string audio_name = name_suffix + " audio " + std::to_string(track + 1);
-		obs_encoder_t *encoder = obs_audio_encoder_create(aac_id.c_str(), audio_name.c_str(), audio_settings,
-								  static_cast<size_t>(track), nullptr);
-		obs_data_release(audio_settings);
-		if (!encoder) {
-			result.error = "Could not create the audio encoder for track " + std::to_string(track + 1);
-			Teardown(res);
-			return result;
-		}
-		obs_encoder_set_audio(encoder, audio);
-		res.audio_encoders.push_back(encoder);
+	obs_data_t *audio_settings = obs_data_create();
+	obs_data_set_string(audio_settings, "rate_control", "CBR");
+	obs_data_set_int(audio_settings, "bitrate", config.audio_bitrate_kbps);
+	const std::string audio_name = name_suffix + " audio " + std::to_string(config.audio_track + 1);
+	res.audio_encoder = obs_audio_encoder_create(aac_id.c_str(), audio_name.c_str(), audio_settings,
+						     static_cast<size_t>(config.audio_track), nullptr);
+	obs_data_release(audio_settings);
+	if (!res.audio_encoder) {
+		result.error = "Could not create the audio encoder for track " + std::to_string(config.audio_track + 1);
+		Teardown(res);
+		return result;
 	}
+	obs_encoder_set_audio(res.audio_encoder, audio);
 
 	obs_data_t *output_settings = obs_data_create();
 	obs_data_set_int(output_settings, "max_time_sec", config.duration_sec);
@@ -216,8 +194,7 @@ StartResult BufferPipeline::Start(obs_source_t *source, const PipelineConfig &co
 	}
 
 	obs_output_set_video_encoder(res.output, res.video_encoder);
-	for (size_t i = 0; i < res.audio_encoders.size(); ++i)
-		obs_output_set_audio_encoder(res.output, res.audio_encoders[i], i);
+	obs_output_set_audio_encoder(res.output, res.audio_encoder, 0);
 
 	signal_handler_t *output_signals = obs_output_get_signal_handler(res.output);
 	signal_handler_connect(output_signals, "saved", OnSaved, this);
@@ -241,10 +218,9 @@ StartResult BufferPipeline::Start(obs_source_t *source, const PipelineConfig &co
 		applied_format_ = config.format;
 	}
 
-	obs_log(LOG_INFO, "Recording '%s' at %ux%u (encoder %s, %d kbps, %d s, %s audio, %zu track(s))",
+	obs_log(LOG_INFO, "Recording '%s' at %ux%u (encoder %s, %d kbps, %d s, mixer track %d)",
 		config.source_name.c_str(), width, height, config.encoder_id.c_str(), config.video_bitrate_kbps,
-		config.duration_sec, config.audio_mode == AudioMode::SceneSource ? "source" : "mixer",
-		res.audio_encoders.size());
+		config.duration_sec, config.audio_track + 1);
 
 	result.code = StartResult::Code::Started;
 	return result;
@@ -269,15 +245,9 @@ void BufferPipeline::Teardown(Resources &res)
 		res.output = nullptr;
 	}
 
-	for (obs_encoder_t *encoder : res.audio_encoders)
-		obs_encoder_release(encoder);
-	res.audio_encoders.clear();
-
-	// Only after the encoders are gone: closing joins the audio thread they read from.
-	if (res.scene_audio) {
-		res.scene_audio->Close();
-		delete res.scene_audio;
-		res.scene_audio = nullptr;
+	if (res.audio_encoder) {
+		obs_encoder_release(res.audio_encoder);
+		res.audio_encoder = nullptr;
 	}
 
 	if (res.video_encoder) {

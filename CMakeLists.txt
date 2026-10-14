@@ -38,6 +38,8 @@ target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE
     src/plugin-main.cpp
+    src/audio-routing.cpp
+    src/audio-routing.hpp
     src/better-buffer-filter.cpp
     src/better-buffer-filter.hpp
     src/buffer-pipeline.cpp
@@ -46,8 +48,6 @@ target_sources(
     src/filter-instance.hpp
     src/filter-settings.cpp
     src/filter-settings.hpp
-    src/scene-audio.cpp
-    src/scene-audio.hpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

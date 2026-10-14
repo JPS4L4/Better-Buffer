@@ -1,5 +1,7 @@
 #include "filter-instance.hpp"
 
+#include "audio-routing.hpp"
+
 #include <obs-module.h>
 #include <plugin-support.h>
 
@@ -17,12 +19,9 @@ std::vector<std::shared_ptr<FilterInstance>> g_instances;
 
 std::string PipelineKey(const PipelineConfig &config, uint32_t width, uint32_t height)
 {
-	// The track selection only matters when the OBS mixer tracks are recorded.
-	const uint32_t track_mask = config.audio_mode == AudioMode::MixerTracks ? config.track_mask : 0;
 	return config.encoder_id + '|' + std::to_string(config.video_bitrate_kbps) + '|' +
 	       std::to_string(config.audio_bitrate_kbps) + '|' + std::to_string(config.duration_sec) + '|' +
-	       std::to_string(static_cast<int>(config.audio_mode)) + '|' + std::to_string(track_mask) + '|' +
-	       std::to_string(width) + 'x' + std::to_string(height);
+	       std::to_string(config.audio_track) + '|' + std::to_string(width) + 'x' + std::to_string(height);
 }
 
 } // namespace
@@ -60,6 +59,7 @@ void FilterInstance::Init(obs_data_t *settings)
 		std::lock_guard<std::mutex> lock(mutex_);
 		settings_ = ReadSettings(settings);
 	}
+	ApplyAudioRoute();
 
 	// OBS stores and restores the key bindings of source hotkeys by itself.
 	hotkey_ = obs_hotkey_register_source(source_, "BetterBuffer.SaveClip", obs_module_text("Hotkey.SaveClip"),
@@ -76,6 +76,7 @@ void FilterInstance::Update(obs_data_t *settings)
 			return;
 		settings_ = std::move(updated);
 	}
+	ApplyAudioRoute();
 	// Reconcile() decides whether the change needs a restart; the buffer is kept otherwise.
 	ScheduleReconcile();
 }
@@ -89,6 +90,8 @@ void FilterInstance::Shutdown()
 		shutdown_ = true;
 	}
 
+	ClearAudioRoute(this);
+
 	// Unregistering waits for a running hotkey callback, so none can use this object afterwards.
 	if (hotkey_ != OBS_INVALID_HOTKEY_ID) {
 		obs_hotkey_unregister(hotkey_);
@@ -97,6 +100,20 @@ void FilterInstance::Shutdown()
 
 	std::lock_guard<std::mutex> reconcile(reconcile_mutex_);
 	StopPipelineLocked();
+}
+
+void FilterInstance::ApplyAudioRoute()
+{
+	FilterSettings settings;
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		settings = settings_;
+	}
+	// Routes of several filters on the same track are merged into the union of their ticks.
+	if (settings.enabled && settings.audio_scope == AudioScope::SelectedSources)
+		SetAudioRoute(this, AudioTrackIndex(settings), settings.audio_sources);
+	else
+		ClearAudioRoute(this);
 }
 
 void FilterInstance::StopForExit()
@@ -326,8 +343,7 @@ void FilterInstance::ReconcileLocked(obs_source_t *parent)
 	config.video_bitrate_kbps = settings.video_bitrate_kbps;
 	config.audio_bitrate_kbps = settings.audio_bitrate_kbps;
 	config.duration_sec = settings.duration_sec;
-	config.audio_mode = settings.audio_mode;
-	config.track_mask = settings.track_mask;
+	config.audio_track = AudioTrackIndex(settings);
 	config.directory = settings.directory;
 	config.format = ExpandFilenameFormat(settings.filename_format, config.source_name);
 

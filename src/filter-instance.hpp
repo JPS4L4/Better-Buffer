@@ -46,6 +46,7 @@ private:
 	static void ReconcileTask(void *param);
 	static void RefreshTask(void *param);
 
+	void ApplyAudioRoute();
 	void ScheduleReconcile();
 	void ScheduleRefresh();
 	void Reconcile();
